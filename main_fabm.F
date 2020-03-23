@@ -402,6 +402,7 @@ c      character*16 rivinp_bio
       myid=0
       nprocs=0
 #endif
+
 c---------------------------------------------------------------------------------
 c     set input/output paths
 c---------------------------------------------------------------------------------
@@ -1875,6 +1876,12 @@ c  begin monthly loop
       print*,' '
       endif
 c***********************************************************************
+
+#ifdef _FABM_
+!KB hardcoding npel to 5 !!!
+      call do_hamsom_fabm(5)
+!KB      stop 'do_hamsom_fabm()'
+#endif
 
       do 2111 lmon=mona,mone
 c      do 2111 lmon=1,1
