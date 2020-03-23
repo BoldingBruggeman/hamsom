@@ -7,7 +7,8 @@ c      parameter (pathpc2= '/utf/u/u241029/output/')   ! output !hurrikan
       parameter (pathpc = './')    !input  Irina linux: GFI063014 
 c      parameter (pathpc = '/work/dhanya/data/')    !input  Irina linux: GFI063014 
       parameter (pathpc2= './')   !output Irina linux: GFI063014
-      parameter (pathpc3= '/work/gg0877/ECOSMO_forcing/')   !output Irina linux: GFI063014 -COASTDAT
+cKB      parameter (pathpc3= '/work/gg0877/ECOSMO_forcing/')   !output Irina linux: GFI063014 -COASTDAT
+      parameter (pathpc3= './')
 c      parameter (pathpc3= '/scratch/g/g266021/')   !output Irina linux: GFI063014 -COASTDAT COSMOREA6
 
 
