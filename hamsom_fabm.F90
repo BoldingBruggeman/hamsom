@@ -45,19 +45,24 @@ subroutine init_hamsom_fabm(m,n,ilo,ndrei,npel)
    end do
    if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (cc1d)'
    allocate(cc1d(ndrei,npel),stat=stat)
-   do l=1,npel
-      call comp3d1d(cc(:,:,:,l),cc1d(:,l))
-   end do
 #if 0
    write(*,*) 'cc', cc
-   write(*,*) 'cc1d',cc1d
-   stop 'kaj'
+   stop 'init_hamsom_fabm()'
 #endif
    return
 end subroutine init_hamsom_fabm
 
-subroutine do_hamsom_fabm()
+subroutine do_hamsom_fabm(npel)
+   integer, intent(in) :: npel
+   integer :: l
    write(*,*) 'Inside do_hamsom_fabm()'
+   do l=1,npel
+      call comp3d1d(cc(:,:,:,l),cc1d(:,l))
+   end do
+#if 0
+   write(*,*) 'cc1d',cc1d
+   stop 'do_hamsom_fabm()'
+#endif
 end subroutine do_hamsom_fabm
 
 subroutine clean_hamsom_fabm()
