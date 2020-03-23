@@ -387,7 +387,7 @@ c      character*16 rivinp_bio
 
 #ifdef _FABM_
 !KB hardcoding npel to 5 !!!
-      call init_hamsom_fabm(m,n,ipo,ndrei,5)
+      call init_hamsom_fabm(m,n,ilo,ndrei,5)
 !KB      stop 'init_hamsom_fabm()'
 #endif
 
