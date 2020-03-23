@@ -14,7 +14,8 @@ private
 
    integer :: stat
 
-   real, allocatable :: cc(:,:,:,:), cc1d(:,:)
+   real, allocatable :: cc(:,:,:,:)
+   real, allocatable, public :: cc1d(:,:)
 
    public init_hamsom_fabm, do_hamsom_fabm, clean_hamsom_fabm
 
