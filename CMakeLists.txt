@@ -31,6 +31,17 @@ add_definitions(-DSASCII)
 add_definitions(-DCARA)
 add_definitions(-DNOFISH)
 
+option(HAMSOM_USE_FABM "Include support for Framework for Aquatic Biogeochemical Models (fabm.net)" OFF)
+if(HAMSOM_USE_FABM)
+   message("Using FABM")
+   add_definitions(-D_FABM_)
+   set (HAMSOM_FABM hamsom_fabm.F90)
+   set(FABM_FORCED_HOST hamsom)
+   add_subdirectory(${PROJECT_SOURCE_DIR}/extern/fabm fabm EXCLUDE_FROM_ALL)
+else()
+   set (HAMSOM_BIO)
+endif()
+
 find_package(NetCDF REQUIRED)
 
 option(HAMSOM_USE_PARALLEL "Use MPI" OFF)
@@ -75,6 +86,9 @@ add_library(hamsom
 target_link_libraries(hamsom PRIVATE netcdf)
 if(HAMSOM_USE_PARALLEL)
   target_link_libraries(hamsom PRIVATE MPI::MPI_Fortran)
+endif()
+if(HAMSOM_USE_FABM)
+	target_link_libraries(hamsom PUBLIC fabm)
 endif()
 
 # Build HAMSOM executable.
