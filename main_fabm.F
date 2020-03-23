@@ -17,6 +17,9 @@ c----------------------------------------------------------------------
 #ifdef COASTDAT
       use ncio
 #endif
+#ifdef _FABM_
+      use hamsom_fabm
+#endif
       include 'C_model.f'
       include 'C_index.f'
       include 'C_paths.f'
@@ -380,6 +383,12 @@ c      character*16 rivinp_bio
       character*17 pathtop,pathset,pathriv,pathmet
 #ifdef MPI
       common /cord1/ icord(nprocs,4)
+#endif
+
+#ifdef _FABM_
+!KB hardcoding npel to 5 !!!
+      call init_hamsom_fabm(m,n,ipo,ndrei,5)
+!KB      stop 'init_hamsom_fabm()'
 #endif
 
 
