@@ -1877,11 +1877,6 @@ c  begin monthly loop
       endif
 c***********************************************************************
 
-#ifdef _FABM_
-!KB hardcoding npel to 5 !!!
-      call do_hamsom_fabm(5)
-!KB      stop 'do_hamsom_fabm()'
-#endif
 
       do 2111 lmon=mona,mone
 c      do 2111 lmon=1,1
@@ -1907,6 +1902,14 @@ c-----------------------------------------------------------------------
 	  open(unit=nout,
      &	  file=pathpc2//pathout//outfile(1:7),form='unformatted')
 	  print*,'output pyhsics monthly file open: ',outfile(1:7)
+
+#ifdef _FABM_
+          outfile(8:8)='b'
+          open(unit=nout_b,
+     &    file=pathpc2//pathout//outfile,form='unformatted')
+          print*,'output biomass monthly file open: ',outfile
+#endif
+
 #else
 	 write(outfile1(6:8),'(i3.3)') myid
 	 open(122,
@@ -1925,6 +1928,21 @@ c-----------------------------------------------------------------------
 
 	  open(unit=nout1,
      &	  file=pathpc2//pathout//outfile(1:8),form='unformatted')
+
+#ifdef _FABM_
+          if(myid .eq. 1)then
+	  write(outfile(6:7),'(i2.2)') monat
+          outfile(8:8)='b'
+          open(unit=nout_b,
+     &    file=pathpc2//pathout//outfile(1:8),form='unformatted')
+          endif
+
+          write(outfile(6:8),'(i3.3)') myid
+
+          outfile(9:9)='b'
+          open(unit=nout_b1,
+     &    file=pathpc2//pathout//outfile(1:9),form='unformatted')
+#endif
 
 #endif
 c-----------------------------------------------------------
@@ -3300,6 +3318,14 @@ c       call stromTVD(zinc1,
 c     &  vtmit,vtmic,avmax,ftac,szahl,
 c     &  einstr,nday,time,54,wgesch) !54 file outtest
        call estate
+c-----------------------------------------------------
+c  calculate biology 
+c---------------------------------------------------
+#ifdef _FABM_
+!KB hardcoding npel to 5 !!!
+      call do_hamsom_fabm(5)
+!KB      stop 'do_hamsom_fabm()'
+#endif
 
 c-----par rausschreiben--------------------------------------
 c	if(rlicht(1).ne.0.)then
@@ -4063,8 +4089,25 @@ c	if(nday.eq.itagend)	 ! monthly backup
        if(igstep1.eq.itagend*toutsteps) ! monthly backup
      & call IO_start_physics_p(nout1,mjar,lmon,nday,ivier,ip,imal)
 #endif
-
-      ENDIF!	    if(mitout) then
+#ifdef _FABM_
+       call ftrace_region_begin ('biological_outpu')
+#ifndef MPI
+       write (nout_b) cc1d
+#else
+       DO ib=1,5  ! npel = 5 here hardcoded needs to be changed 
+       DO J=J1,J2
+       lwa=lb0(J)
+       lwe=le0(J)
+       if(lwe .ge. lwa) then
+       nwet1=indwet(lwa)+1
+       nwet2=indwet(lwe)+lazc(lwe)
+       write (nout_b1) (cc1d(k,ib),k=nwet1,nwet2)
+       endif
+       enddo
+       enddo
+#endif
+#endif
+      ENDIF!	    if(miaout) then
 	call ftrace_region_end ('mitout')
 
  2006	format(8(1x,e18.12))
@@ -4209,10 +4252,14 @@ c-----------------------------------------------------------------------
        endif
 
        if(lmon .eq. 12) close(nout_start)
+
+       call combine_output_bio(nout_b,pathout,monat,ppp,
+     & mjar,icord,itagend,nout_start,lmon,toutsteps,5)  !npel=5 hardcoded
        endif
        CALL MPI_BARRIER(MPI_COMM_WORLD,IERR)
 #endif
       close(nout  ) !	= 85		   ! physical	  variables Monthly output
+      close(nout_b) !	= 86		   ! production	  variables Monthly output
       close(nout_f) !	= 87		   ! production	  variables Monthly output
       close(nout_s) !	= 88		   ! space fluxes variables Monthly output
 

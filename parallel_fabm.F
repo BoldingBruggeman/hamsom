@@ -3356,6 +3356,87 @@ c      call system(rm command)
       return
       end
 
+**************************************************************************************************************************************************
+       subroutine combine_output_bio(nout,pathout,monat,ppp,
+     & mjar,icord,itagend,nout_start,lmon,toutsteps,npel)
+      include 'C_model.f'
+      include 'C_paths.f'
+      include 'C_mpi.f'
+      include 'C_index.f'
+      parameter (khor1=khor+1)
+      integer npel
+      common /lbkhor/ khorl,lzet(khor),lb0(n),le0(n),
+     * lb1(n),le1(n),lb2(n),le2(n)
+      dimension A(ndrei,npel)  !dimension need to be npel make sure to change here hardcoded
+      character ppp*3,outfile*10
+      character*19 pathout
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),indend(n),
+     *             isornr(n),isorsr(n),islab(n)
+      common /surface/ izets(m,n),izete(m,n)
+      dimension icord(nprocs,4)
+      common /out11/ mzet(khor,nprocs),lkhor(nprocs)
+
+      outfile(1:3)=ppp
+      write(outfile(4:5),'(i2.2)') mjar
+c      write(outfile(6:7),'(i2.2)') monat 
+      outfile(9:9)='b'
+
+      DO nn=1,nprocs
+      write(outfile(6:8),'(i3.3)') nn-1
+      open(unit=600+nn,file=pathpc2//pathout//outfile
+     &,form='unformatted')
+      ENDDO
+
+      do I=1,itagend*toutsteps
+      do nn=1,nprocs
+      I11=icord(nn,1)
+      I22=icord(nn,2)
+      J11=icord(nn,3)
+      J22=icord(nn,4)
+      do ib=1,npel
+      do J=J11,J22
+      lwa=izets(I11,J)
+      lwe=izete(I22,J)
+      if(lwe .ge. lwa) then
+      nwet1=indwet(lwa)+1
+      nwet2=indwet(lwe)+lazc(lwe)
+      read(600+nn)(A(k,ib),k=nwet1,nwet2)
+      endif
+      enddo
+      enddo
+      enddo
+      write (nout) A
+      enddo
+      
+c      do nn=1,nprocs
+c      I11=icord(nn,1)
+c      I22=icord(nn,2)
+c      J11=icord(nn,3)
+c      J22=icord(nn,4)
+c      do ib=1,npel
+c      do J=J11,J22
+c      lwa=izets(I11,J)
+c      lwe=izete(I22,J)
+c      if(lwe .ge. lwa) then
+c      nwet1=indwet(lwa)+1
+c      nwet2=indwet(lwe)+lazc(lwe)
+c      read(600+nn)(A(k,ib),k=nwet1,nwet2)
+c      endif
+c      enddo
+c      enddo
+c      enddo
+c
+c      write (nout)A
+c      if(lmon .eq. 12) then
+c      write (nout_start)A
+c      endif
+      do nn=1,nprocs
+      close(600+nn)
+      enddo
+
+      return
+      end
+
 *************************************************************************************************************************************************
       subroutine combine_meteo_data(nanz,outfile1,pathout,nloop)
       include 'C_mpi.f'
