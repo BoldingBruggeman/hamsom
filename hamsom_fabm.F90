@@ -16,7 +16,7 @@ private
 
    real, allocatable, dimension(:,:), public :: cc1d
    real, allocatable, dimension(:,:,:,:) :: cc 
-   integer, allocatable, dimension(:,:,:) :: mask 
+   logical, allocatable, dimension(:,:,:), target :: mask 
    real, allocatable, dimension(:,:,:), target :: S, T
    ! use pointers to HAMSOM state variables
 
@@ -41,12 +41,12 @@ subroutine init_hamsom_fabm(m,n,ilo,ndrei,npel,sac,tec)
 
    do l=1,npel
       do k=1,ndrei
-         cc1d(k,l) = 100*k+l
+         cc1d(k,l) = k+l/10.
       end do
    end do
 
    cc = -10.
-   mask = 0
+   mask = .false.
 
    ! FABM pelagics is being 'initialized'
    do l=1,npel
@@ -58,7 +58,10 @@ subroutine init_hamsom_fabm(m,n,ilo,ndrei,npel,sac,tec)
 
    ! here we initialize the 3D mask - Ute - check
 !   where (S(:,:,:) .gt. 0.) mask = 1
-   where (cc(:,:,:,1) .gt. 0.) mask = 1
+   where (cc(:,:,:,1) .gt. 0.) mask = .true.
+
+   ! call model%set_bottom_index with a 2D array 
+   ! call model%set_bottom_index(indend) ! ltief, lacz !!!
 
 #if 0
    write(*,*) 'cc1d: '
@@ -75,7 +78,7 @@ end subroutine init_hamsom_fabm
 
 
 subroutine allocate_hamsom_fabm(m,n,ilo,ndrei,npel)
-   integer, intent(in) :: m,n,ilo ! y (m -> from north, n -> from west, ilo -> from top)
+   integer, intent(in) :: m,n,ilo ! y (m -> from north), x (n -> from west), z (ilo -> from top)
    integer, intent(in) :: ndrei
    integer, intent(in) :: npel
 
@@ -103,7 +106,7 @@ subroutine do_hamsom_fabm(ndrei,npel)
    integer :: l
    write(*,*) 'Inside do_hamsom_fabm()'
 
-   cc1d = cc1d+0.001 ! effect of advection/diffusion etc.
+   cc1d = cc1d+0.1 ! effect of advection/diffusion etc.
 
    do l=1,npel
       call deco1d3d(cc(:,:,:,l),cc1d(:,l),ndrei)

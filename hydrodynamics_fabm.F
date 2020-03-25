@@ -1379,6 +1379,7 @@ c-----------------------------------------------------------------------
                j = indver(ll)
                i = indi(ll)
                d1(ll) = d3(i,k,j) 
+!               write(*,*) 'kurt',d1(ll)
             end do
          end if
       end do

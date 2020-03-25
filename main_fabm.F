@@ -388,8 +388,10 @@ c      character*16 rivinp_bio
 #ifdef _FABM_
 !KB hardcoding npel to 5 !!!
       call init_hamsom_fabm(m,n,ilo,ndrei,5,sac,tec)
-!      write(*,*) sac
-!      stop 'kaj'
+#if 1      
+      write(*,*) indend
+      stop 'kaj'
+#endif      
 !KB      stop 'init_hamsom_fabm()'
 #endif
 
@@ -1003,6 +1005,14 @@ c--------------------------
 	 txac_2=0.;tyac_2=0.;wspeed_2=0.
 	 qwt_2=0.;q10_2=0.;tl10_2=0.;
 	 fqs_2=0.;fql_2=0.;evap_2=0.;
+
+#ifdef _FABM_
+#ifdef MPI
+      call deco1d3d_s (dudo3,sac,ndrei)
+#else
+      call deco1d3d (dudo3,sac,ndrei)
+#endif
+#endif
 
 c-------------------------------------------------------------------------------
 c   zero-initialisation of biological variables
@@ -1880,8 +1890,8 @@ c  begin monthly loop
 c***********************************************************************
 
 
-      do 2111 lmon=mona,mone
-c      do 2111 lmon=1,1
+cKB      do 2111 lmon=mona,mone
+      do 2111 lmon=1,1
       igstep1 = 0
       it_init = 0
       monat = lmon
