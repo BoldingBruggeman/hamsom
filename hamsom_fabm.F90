@@ -10,60 +10,112 @@ implicit NONE
 
 private
 
-   EXTERNAL comp3d1d
+   EXTERNAL comp3d1d, deco1d3d
 
    integer :: stat
 
-   real, allocatable :: cc(:,:,:,:)
-   real, allocatable, public :: cc1d(:,:)
+   real, allocatable, dimension(:,:), public :: cc1d
+   real, allocatable, dimension(:,:,:,:) :: cc 
+   integer, allocatable, dimension(:,:,:) :: mask 
+   real, allocatable, dimension(:,:,:), target :: S, T
+   ! use pointers to HAMSOM state variables
 
    public init_hamsom_fabm, do_hamsom_fabm, clean_hamsom_fabm
 
 contains
 
-subroutine init_hamsom_fabm(m,n,ilo,ndrei,npel)
+subroutine init_hamsom_fabm(m,n,ilo,ndrei,npel,sac,tec)
    integer, intent(in) :: m,n,ilo
    integer, intent(in) :: ndrei
    integer, intent(in) :: npel
+   real, intent(in) :: sac(:),tec(:)
 
-   integer :: i,j,k,l
+   integer :: k,l
 
    write(*,*) 'Inside init_hamsom_fabm()'
    write(*,*) '  m,n,ilo= ',m,n,ilo
    write(*,*) '  ndrei=   ',ndrei
    write(*,*) '  npel=    ',npel
 
-   allocate(cc(m,n,ilo,npel),stat=stat)
-   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (cc)'
+   call allocate_hamsom_fabm(m,n,ilo,ndrei,npel)
+
    do l=1,npel
-      do k=1,ilo
-         do j=1,n
-            do i=1,m
-               cc(i,j,k,l) = 100000*i+10000*j+100*k+l
-            end do
-         end do
+      do k=1,ndrei
+         cc1d(k,l) = 100*k+l
       end do
    end do
-   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (cc1d)'
-   allocate(cc1d(ndrei,npel),stat=stat)
+
+   cc = -10.
+   mask = 0
+
+   ! FABM pelagics is being 'initialized'
+   do l=1,npel
+      call deco1d3d(cc(:,:,:,l),cc1d(:,l),ndrei)
+   end do
+
+!   call deco1d3d(S,sac,ndrei)
+!   call deco1d3d(T,tec,ndrei)
+
+   ! here we initialize the 3D mask - Ute - check
+!   where (S(:,:,:) .gt. 0.) mask = 1
+   where (cc(:,:,:,1) .gt. 0.) mask = 1
+
 #if 0
-   write(*,*) 'cc', cc
-   stop 'init_hamsom_fabm()'
+   write(*,*) 'cc1d: '
+   write(*,*) cc1d(:,1)
+   write(*,*) 'cc: '
+   write(*,*) cc(:,:,1,1)
+   write(*,*) 'mask: '
+   write(*,*) mask(:,:,1)
+   stop
 #endif
+
    return
 end subroutine init_hamsom_fabm
 
-subroutine do_hamsom_fabm(npel)
+
+subroutine allocate_hamsom_fabm(m,n,ilo,ndrei,npel)
+   integer, intent(in) :: m,n,ilo ! y (m -> from north, n -> from west, ilo -> from top)
+   integer, intent(in) :: ndrei
    integer, intent(in) :: npel
+
+   allocate(cc1d(ndrei,npel),stat=stat)
+   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (cc1d)'
+
+   allocate(cc(m,n,ilo,npel),stat=stat)
+   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (cc)'
+
+   allocate(mask(m,n,ilo),stat=stat)
+   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (mask)'
+
+   allocate(S(m,n,ilo),stat=stat)
+   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (S)'
+
+   allocate(T(m,n,ilo),stat=stat)
+   if (stat /= 0) stop 'init_hamsom_fabm(): Error allocating memory (T)'
+
+   return
+end subroutine allocate_hamsom_fabm
+
+
+subroutine do_hamsom_fabm(ndrei,npel)
+   integer, intent(in) :: ndrei,npel
    integer :: l
    write(*,*) 'Inside do_hamsom_fabm()'
+
+   cc1d = cc1d+0.001 ! effect of advection/diffusion etc.
+
+   do l=1,npel
+      call deco1d3d(cc(:,:,:,l),cc1d(:,l),ndrei)
+   end do
+
+   ! here cc should be updated
+
    do l=1,npel
       call comp3d1d(cc(:,:,:,l),cc1d(:,l))
    end do
-#if 0
-   write(*,*) 'cc1d',cc1d
-   stop 'do_hamsom_fabm()'
-#endif
+
+   return
 end subroutine do_hamsom_fabm
 
 subroutine clean_hamsom_fabm()

@@ -387,7 +387,9 @@ c      character*16 rivinp_bio
 
 #ifdef _FABM_
 !KB hardcoding npel to 5 !!!
-      call init_hamsom_fabm(m,n,ilo,ndrei,5)
+      call init_hamsom_fabm(m,n,ilo,ndrei,5,sac,tec)
+!      write(*,*) sac
+!      stop 'kaj'
 !KB      stop 'init_hamsom_fabm()'
 #endif
 
@@ -3323,7 +3325,7 @@ c  calculate biology
 c---------------------------------------------------
 #ifdef _FABM_
 !KB hardcoding npel to 5 !!!
-      call do_hamsom_fabm(5)
+      call do_hamsom_fabm(ndrei,5)
 !KB      stop 'do_hamsom_fabm()'
 #endif
 
