@@ -70,7 +70,7 @@ subroutine configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
 
    call allocate_fabm(myid,m,n,ilo,nbio,nsed)
 
-   ivar = fabm_var_index('sed2')
+   ivar = fabm_var_index('oxy')
    write(*,*) 'ivar ',ivar
 
    if (myid .eq. 0) then
@@ -83,7 +83,6 @@ subroutine configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
          write(fabmunit,*) ivar,trim(model%bottom_state_variables(ivar)%name)
       end do
    end if
-   stop 'kaj'
 #if 0
       select case (model%state_variables(ivar)%name)
       case('no3')
