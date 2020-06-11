@@ -2315,7 +2315,8 @@ c-------------------------------------------------------------------
        real iijahr,iimonth,iiday
       
        inumeintr=numeintr+3  
-      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
+cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
+      read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
      &(rivinp(num),num=1,numeintr)
        if(myid.eq.0)then
        print*,'read riv: ', iijahr,iimonth,iiday,
