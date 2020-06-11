@@ -304,9 +304,14 @@ c		bio_riv: nutrient loads from rivers
 c------------------------------------------------------------------------------
 
       common /T_4d/ Tc(ndrei,nbio) !Tc_mit(ndrei,nbio+nsed)
+      common /ben_4d/ Tsed(ndrei,nsed)
 c      common /bio_riv/riv_bio(nbio,nanz),
 c     &		     zriv_bio(nbio,m,n)
 
+c--- help arrays for bio I/O
+cc      common /bio_out/bio_out(ndrei,npel+nben)  !npel
+      common /bio_out/bio_out(ndrei,nbio+nsed)  !npel
+      dimension bio_out1(ndrei,3:18)
 
       double precision zinc(m,n),zinc1(m,n)
       double precision wsur(khor)
@@ -386,21 +391,14 @@ c      character*16 rivinp_bio
 #endif
 
 #ifdef _FABM_
-!KB hardcoding npel to 5 !!!
-      call init_hamsom_fabm(m,n,ilo,ndrei,5,sac,tec)
-#if 1      
-      write(*,*) indend
-      stop 'kaj'
-#endif      
-!KB      stop 'init_hamsom_fabm()'
+      call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
 #endif
-
 
 #ifdef MPI
       call init_parallel(myid,nprocs,ierr)
       if(nprocs .le. 1) then
       write(*,*) 'increase number of processors else use sequential'
-      stop
+!      stop
       endif
 #else
       myid=0
@@ -1008,7 +1006,7 @@ c--------------------------
 
 #ifdef _FABM_
 #ifdef MPI
-      call deco1d3d_s (dudo3,sac,ndrei)
+cKB      call deco1d3d_s (dudo3,sac,ndrei)
 #else
       call deco1d3d (dudo3,sac,ndrei)
 #endif
@@ -1599,6 +1597,136 @@ c-----------------------------------------------------------------------------
       read (nfuset,2004,err=9876,end=9874) frice,his,hisr,tis
       read (nfuset,2004,err=9876,end=9874) ui,vi
       close(unit=nfuset)
+#ifdef _FABM_
+        if(ijahr_start.eq.1990)then
+c      if(ijahr_start.eq.1979)then
+#ifdef SATLAS
+        goto 6575  ! start from WOA atlas file
+#else
+c       startfile(1:3)=ppp
+        startfile(1:3)='cd3'
+#endif
+        else
+        startfile(1:3)=ppp
+        endif
+c-----------------------------------------------------------------
+c     read biomass start files, binary
+c      spinup formulation is missing
+c-----------------------------------------------------------------
+        write(startfile(4:5),'(i2.2)') mjar_1
+                startfile(6:9)         ='1231'
+          startfile(10:10)='b'
+
+      write(*,*)pathpc2//pathout(1:14)//ijahr_1//'/'
+     &//startfile(1:10)//'_start',myid
+       open(nout_start,file=
+     & pathpc2//pathout(1:14)//ijahr_1//'/'//startfile(1:10)//'_start'
+     &,form='unformatted')
+       read (nout_start) bio_out  !current
+       close(nout_start)
+
+      goto 6576  !to change units
+
+6575  continue
+c---------------------------------------------------------------------------
+*   start from intitial conditions taken from WOA01 Atlas (2001), file
+*   b_iYYMMDD, ASCII
+c--------------------------------------------------------------------------
+      IF(myid .EQ. 0)THEN
+      write(*,*)'read biology from atlas ASCII :',
+     &pathpc//'north_b/input_1989/b_i891231'
+      endif
+      nfuset=12
+      open(nfuset,file= pathpc//'north_b/input_1989/b_i891231')
+c--Ute-Daewel-----nbio-5 wegen bg=15,sed1=16,sed2=17,sed3=18
+          do ibio=3,nbio-5
+c        do ibio=1,11  !npel
+        read (nfuset,2006,err=9876,end=9874) (bio_out (l,ibio),l=1,ntot)
+        IF(myid .EQ. 0) print*,'bio_out=',ibio,'read'
+          enddo
+        close(unit=nfuset)
+
+c---------------------------------------------------------------------------
+*     correction of winter seasonal means from Atlas to represent
+*     January conditions
+c--------------------------------------------------------------------------
+c        do ibio=1,2  !number changed back to when bio includes 1,2 T&S Ute 26.5.20
+        do ibio=3,4
+        do lw=1,ndrei
+        bio_out(lw,ibio)=bio_out(lw,ibio)/160.   !3 mgC
+        enddo
+        enddo
+        do ibio=5,7
+        do   lw=1,ndrei
+        bio_out(lw,ibio)=bio_out(lw,ibio)/320.   !3 mgC
+        enddo
+        enddo
+
+        do ibio=8,9
+        do   lw=1,ndrei
+        bio_out(lw,ibio)=bio_out(lw,ibio)/55.   !3 mgC
+        enddo
+        enddo
+
+c-ute-initial bedingungen Bluegreens keine AHnung soweit im atlas checken
+       do lw=1,ndrei
+       bio_out(lw,14)=0.   !opal
+       bio_out(lw,15)=0.1  !cyanos
+c------set initial values for new variables here------
+       enddo
+c---ute daewel 5/1/2010 initial conditions for sediment taken from 1980
+c---after 3-years spinup
+       startfile(1:3)='t03' !ppp
+       write(startfile(4:5),'(i2.2)') 80
+         startfile(6:9)         ='1231'
+         startfile(10:10)='b'
+      IF(myid .EQ. 0)THEN
+       print*,'read sed input from',
+     & pathpc2//pathout(1:14)//'1980/'//startfile(1:10)//'_start'
+      endif
+       open(nout_start,file=
+     & pathpc2//pathout(1:14)//'1980/'//startfile(1:10)//'_start'
+     &,form='unformatted')
+       read (nout_start) bio_out1 !current
+        close(nout_start)
+c   initialise sediments from an old run
+       ixbio=0
+       do ibio=16,18
+           ixbio=ixbio+1
+        do   lw=1,ndrei
+c       bio_out(lw,npel+ixbio)=bio_out1(lw,ibio)
+       bio_out(lw,nbio+ixbio)=bio_out1(lw,ibio)
+       enddo
+       enddo
+c---------------------------------------------------
+
+       goto 6576  !to change units
+c--------------------------------------------------------------------------
+c      set Tc & Tsed and change units
+c--------------------------------------------------------------------------
+6576   continue
+c       write(*,*) nbio,npel,nben
+       do lw=1,ndrei
+c       do ibio=1,npel
+         do ibio=3,nbio
+        Tc(lw,ibio)=bio_out(lw,ibio)
+        enddo
+        do ii=1,nsed
+        Tsed(lw,ii)=bio_out(lw,nbio+ii)
+        enddo
+       enddo
+c       inbio=size(Tc,2)
+c       call change_units(Tc,1,inbio)
+
+c        do ibio=3,nbio
+c        do   lw=1,ndrei
+c        Tc(lw,ibio)=bio_out(lw,ibio)
+c        enddo
+c        enddo
+c      call Rzero(bio_out,ndrei*(npel+nben))
+      call Rzero(bio_out,ndrei*(nbio+nsed))
+
+#endif
 
  2003	format(4i5)
  2004	format(8(1x,e12.6))
@@ -1682,6 +1810,7 @@ c-----------------------------------------------------------------------
 
 	close(unit=nfuins)
 	close(unit=nfuint)
+
 c-----------------------------------------------------------------------
 c     check if the T,S-array is correctly filled
 c-----------------------------------------------------------------------
@@ -1765,11 +1894,13 @@ c ###	  print*,'salt bottom gotl ',dudo3(87,147,(idudo2(87,147)))
 #else
 	call comp3d1d (dudo3,tec)
 #endif
+
 !	 call estate
 
 
 c=====End of cold start ==================================
       ENDIF !	    IF(neust1)THEN
+
 
 !c-----------------------------------------------------------------------
 	IF(myid .EQ. 0)THEN
@@ -1880,6 +2011,11 @@ c-----------------------------------------------------------------------
 	  outfile1(1:3)=ppp
 	  write(outfile1(4:5),'(i2.2)') mjar
 #endif
+#ifdef _FABM_  
+       call initialize_fabm(myid,lazc,iwet,indend,icord,pd2,
+     &                      Tc,Tsed,einstr)
+#endif
+
 c***********************************************************************
 c  begin monthly loop
       IF(myid .EQ. 0)THEN
@@ -3334,9 +3470,7 @@ c-----------------------------------------------------
 c  calculate biology 
 c---------------------------------------------------
 #ifdef _FABM_
-!KB hardcoding npel to 5 !!!
-      call do_hamsom_fabm(ndrei,5)
-!KB      stop 'do_hamsom_fabm()'
+      call update_fabm(myid,Tc,Tsed)
 #endif
 
 c-----par rausschreiben--------------------------------------
@@ -4102,18 +4236,31 @@ c	if(nday.eq.itagend)	 ! monthly backup
      & call IO_start_physics_p(nout1,mjar,lmon,nday,ivier,ip,imal)
 #endif
 #ifdef _FABM_
-       call ftrace_region_begin ('biological_outpu')
+       call ftrace_region_begin ('biological_output')
+
+c--------------------------------------------------
+c--for now just copy pelagic and benthoc variables to bio_out
+c-------------originally that are the daily means
+
+       do ibio=1,nbio
+       bio_out(:,ibio)=Tc(:,ibio)
+       enddo
+       do ibio=1,nsed
+       bio_out(:,nbio+ibio)=Tc(:,ibio)
+       enddo
+c----------------------
 #ifndef MPI
-       write (nout_b) cc1d
+       write (nout_b) bio_out
 #else
-       DO ib=1,5  ! npel = 5 here hardcoded needs to be changed 
+!KB
+       DO ib=1,nbio
        DO J=J1,J2
        lwa=lb0(J)
        lwe=le0(J)
        if(lwe .ge. lwa) then
        nwet1=indwet(lwa)+1
        nwet2=indwet(lwe)+lazc(lwe)
-       write (nout_b1) (cc1d(k,ib),k=nwet1,nwet2)
+       write (nout_b1) (bio_out(k,ib),k=nwet1,nwet2)
        endif
        enddo
        enddo
@@ -4264,7 +4411,7 @@ c-----------------------------------------------------------------------
        endif
 
        if(lmon .eq. 12) close(nout_start)
-
+!this need to be fixed Ute 26.5.20 adjust number of output parameters
        call combine_output_bio(nout_b,pathout,monat,ppp,
      & mjar,icord,itagend,nout_start,lmon,toutsteps,5)  !npel=5 hardcoded
        endif
