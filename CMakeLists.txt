@@ -30,7 +30,10 @@ add_definitions(-DSATLAS)
 add_definitions(-DSASCII)
 add_definitions(-DCARA)
 add_definitions(-DNOFISH)
+add_compile_options(-pg -g -fpe0 -traceback -check all -debug extended)
+#add_compile_options(-pg -g -fbacktrace -fcheck=all -ffpe-trap=zero,overflow,underflow)
 
+set(FABM_FORCED_REAL_KIND "selected_real_kind(6)")
 option(HAMSOM_USE_FABM "Include support for Framework for Aquatic Biogeochemical Models (fabm.net)" OFF)
 if(HAMSOM_USE_FABM)
    message("Using FABM")
@@ -81,7 +84,7 @@ add_library(hamsom
             setup_fabm.F
             subs.F
             trmice_cd2swr.F
-            main_fabm.F
+#            main_fabm.F
 )
 target_link_libraries(hamsom PRIVATE netcdf)
 if(HAMSOM_USE_PARALLEL)
