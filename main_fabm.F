@@ -6,6 +6,7 @@ c     North Sea/ Baltic Sea version  last changes: Oct.2018
 c     model code describing for the physical part of ECOSMO     
 c     ecosmo e2e is removed 20.03.2020
 c references (Schrum et al. 2006; Daewel and Schrum 2013)
+c     FABM implementation by Bolding & Bruggemann, DK
 c-----------------------------------------------------------------------
 
 c----------------------------------------------------------------------
@@ -391,6 +392,7 @@ c      character*16 rivinp_bio
 #endif
 
 #ifdef _FABM_
+      integer ivar
       call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
 #endif
 
@@ -1700,12 +1702,54 @@ c       bio_out(lw,npel+ixbio)=bio_out1(lw,ibio)
        enddo
 c---------------------------------------------------
 
-       goto 6576  !to change units
 c--------------------------------------------------------------------------
 c      set Tc & Tsed and change units
 c--------------------------------------------------------------------------
-6576   continue
 c       write(*,*) nbio,npel,nben
+ccc-ute 160620-----change_units added to subs.F
+       inbio=size(bio_out,2)
+6576   continue
+       call change_units(bio_out,1,inbio)
+#ifdef _FABM_
+       do lw=1,ndrei
+         ivar = fabm_var_index('fla')
+         Tc(lw,ivar)=bio_out(lw,3)
+         ivar = fabm_var_index('dia')
+         Tc(lw,ivar)=bio_out(lw,4)
+         ivar = fabm_var_index('microzoo')
+         Tc(lw,ivar)=bio_out(lw,5)
+         ivar = fabm_var_index('mesozoo')
+         Tc(lw,ivar)=bio_out(lw,6)
+         ivar = fabm_var_index('det')
+         Tc(lw,ivar)=bio_out(lw,7)
+         ivar = fabm_var_index('nh4')
+         Tc(lw,ivar)=bio_out(lw,8)
+         ivar = fabm_var_index('dom')
+         Tc(lw,ivar)=bio_out(lw,9)
+         ivar = fabm_var_index('no3')
+         Tc(lw,ivar)=bio_out(lw,10)
+         ivar = fabm_var_index('pho')
+         Tc(lw,ivar)=bio_out(lw,11)
+         ivar = fabm_var_index('sil')
+         Tc(lw,ivar)=bio_out(lw,12)
+         ivar = fabm_var_index('oxy')
+         Tc(lw,ivar)=bio_out(lw,13)
+         ivar = fabm_var_index('opa')
+         Tc(lw,ivar)=bio_out(lw,14)
+!         ivar = fabm_var_index('bg')
+!         Tc(lw,ivar)=bio_out(lw,15)
+
+         ivar = fabm_var_index('sed1')  
+         Tsed(lw,ivar)=bio_out(lw,nbio+1)
+         ivar = fabm_var_index('sed2')  
+         Tsed(lw,ivar)=bio_out(lw,nbio+2)
+         ivar = fabm_var_index('sed3')  
+         Tsed(lw,ivar)=bio_out(lw,nbio+3)
+        enddo
+#else
+      
+         do ibio=1,nbio
+        
        do lw=1,ndrei
 c       do ibio=1,npel
          do ibio=3,nbio
@@ -1726,6 +1770,7 @@ c        enddo
 c      call Rzero(bio_out,ndrei*(npel+nben))
       call Rzero(bio_out,ndrei*(nbio+nsed))
 
+#endif 
 #endif
 
  2003	format(4i5)
