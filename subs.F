@@ -2325,5 +2325,65 @@ cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
        return
        end 
 
+c---------------------------------------------------------------------------------------
+      subroutine change_units(f,n_choice,inbio)
+      include 'C_model.f'
+      parameter (ips=3,ipl=4,ibg=15,izs=5,izl=6,idet=7,inh4=8,
+     &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
+     &ised1=1,ised2=2,ised3=3,imb1=4)
+      dimension f(ndrei,*)
+      real REDF(10)
+c/////redfield ratios/////
+       DATA
+     &      REDF(1)/6.625/,  !C_N    PrmREDF(1) mol_C/mol_N=    6.625
+     &      REDF(2)/106.0/,  !C_P    PrmREDF(2) mol_C/mol_P=  106.000
+     &      REDF(3)/6.625/,  !C_SiO  PrmREDF(3) mol_C/mol_Si=    6.625
+     &      REDF(4)/16.0/,  !N_P    PrmREDF(4) mol_N/mol_P=   16.000
+     &      REDF(5)/1.0/,   !N_SiO  PrmREDF(5) mol_N/mol_Si=    1.000
+     &      REDF(6)/12.010/,   !C_Cmg  PrmREDF(6) mg_C/mmol_C=   12.010
+     &      REDF(7)/44.6608009/,   !mm_ml  PrmREDF(7)(mmolO2/m**3)/(mlO2/l)   = 44.6608009
+     &      REDF(8)/14.007/,   !  mmolN/mgN   
+     &      REDF(9)/30.97/,   ! mmolP/mgP
+     &      REDF(10)/28.09/   ! mmolSi/mgSi
+       if(n_choice.eq.1)then
+
+*------change units
+         do l=1,ndrei
+         do ibio=3,7  !Ps, Pl, Zs, Zl, De
+         bio_out(l,ibio)=f(l,ibio)        !*REDF(6)  !input in   mgC /m**3 to [mmolC/m**3]
+         enddo
+         bio_out(l,idom)=bio_out(l,idom)  !dom ==det
+c         bio_out(l,idom)=f(l,idom)  !dom ==det
+         bio_out(l,inh4)=f(l,inh4)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
+         bio_out(l,ino3)=f(l,ino3)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
+         bio_out(l,ipo4)  =f(l,ipo4)  *REDF(2)*REDF(6)  !input in mmolP /m**3 to [mmolC/m**3]
+         bio_out(l,isio)  =f(l,isio)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+         bio_out(l,iop)  =f(l,iop)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+
+         bio_out(l,io2)  =f(l,io2)  *REDF(7)          !input in milliliters O2/liter to  mmolO2/m**3
+
+	do ibio=15,inbio
+         bio_out(l,ibio)  =f(l,ibio)                    !bg
+	enddo
+         enddo !l=1,nrei
+
+      else
+*------change units
+         do l=1,ndrei
+         do ibio=3,7  !Ps, Pl, Zs, Zl, De
+         bio_out(l,ibio)=f(l,ibio)         !*REDF(16)  !output from [mmolC/m**3] to mgC /m**3
+         enddo
+         bio_out(l,idom)=f(l,idom)
+         bio_out(l,inh4)=f(l,inh4)*1./REDF(1)*1./REDF(6)  !output from [mmolC/m**3] to mmolN /m**3
+         bio_out(l,ino3)=f(l,ino3)*1./REDF(1)*1./REDF(6)  !output from [mmolC/m**3] to mmolN /m**3
+         bio_out(l,ipo4)  =f(l,ipo4)  *1./REDF(2)*1./REDF(6)  !output from [mmolC/m**3] to mmolP /m**3
+         bio_out(l,isio)  =f(l,isio)  *1./REDF(3)*1./REDF(6)  !output from [mmolC/m**3] to mmolSi/m**3
+         bio_out(l,iop)  =f(l,iop)  *1./REDF(3)*1./REDF(6)  !output from [mmolC/m**3] to mmolSi/m**3
+
+         bio_out(l,io2)  =f(l,io2)  *1./REDF(7)           !output from mmolO2/m**3 to mlO2/l
+	do ibio=15,inbio
+         bio_out(l,ibio)  =f(l,ibio)                    !bg
+	enddo
+         enddo !l=1,nrei
 
 
