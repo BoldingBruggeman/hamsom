@@ -2332,6 +2332,7 @@ c-------------------------------------------------------------------------------
      &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
      &ised1=1,ised2=2,ised3=3,imb1=4)
       dimension f(ndrei,*)
+      common /bio_out/bio_out(ndrei,nbio+nsed)  !npel
       real REDF(10)
 c/////redfield ratios/////
        DATA
@@ -2362,10 +2363,10 @@ c         bio_out(l,idom)=f(l,idom)  !dom ==det
 
          bio_out(l,io2)  =f(l,io2)  *REDF(7)          !input in milliliters O2/liter to  mmolO2/m**3
 
-	do ibio=15,inbio
+        do ibio=15,inbio
          bio_out(l,ibio)  =f(l,ibio)                    !bg
-	enddo
-         enddo !l=1,nrei
+        enddo
+        enddo !l=1,nrei
 
       else
 *------change units
@@ -2381,9 +2382,10 @@ c         bio_out(l,idom)=f(l,idom)  !dom ==det
          bio_out(l,iop)  =f(l,iop)  *1./REDF(3)*1./REDF(6)  !output from [mmolC/m**3] to mmolSi/m**3
 
          bio_out(l,io2)  =f(l,io2)  *1./REDF(7)           !output from mmolO2/m**3 to mlO2/l
-	do ibio=15,inbio
+       do ibio=15,inbio
          bio_out(l,ibio)  =f(l,ibio)                    !bg
-	enddo
-         enddo !l=1,nrei
-
+       enddo
+       enddo !l=1,nrei
+       endif
+       end 
 
