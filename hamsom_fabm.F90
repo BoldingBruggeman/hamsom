@@ -30,12 +30,19 @@ private
    real, allocatable, dimension(:,:,:), target :: sediment 
    logical, allocatable, dimension(:,:,:) :: mask 
    integer, allocatable, dimension(:,:), target :: bindx 
+   real, allocatable, dimension(:,:,:), target :: surf_flux 
+   real, allocatable, dimension(:,:,:), target :: surf_sms 
+   real, allocatable, dimension(:,:,:,:), target :: interior_sms
+   real, allocatable, dimension(:,:,:), target :: bott_flux 
+   real, allocatable, dimension(:,:,:), target :: bott_sms
 
    ! use pointers to HAMSOM state and environmental variables
    real, dimension(:,:,:), pointer :: pT, pS
 #ifndef MPI
    integer :: myid=0
 #endif
+
+   integer :: il,ih,jl,jh
 
 !   public configure_fabm, allocate_fabm, initialize_fabm, update_fabm, clean_fabm
    public configure_fabm, initialize_fabm, update_fabm, clean_fabm
@@ -119,7 +126,6 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
 
    integer :: ndrei,nbio,nsed,khor
    integer :: i,j,k,l
-   integer :: il,ih,jl,jh
    integer :: ivar
 !KB   type (type_horizontal_variable_id) :: id_swr
 
@@ -272,33 +278,28 @@ subroutine update_fabm(myid,Tc,Tsed)
 
    call model%prepare_inputs()
 
-#if 0   
-! allocate
-! dbio on full , m,n,ilo,size(interio
-! dbio=0.
-! dsed on  m,n,size(bottom_
-! dsed=0.
-! get_interior, get_bottom_, get_surface
 ! get_vertical_move - maybe send individually
 
    ! here the surface is updated
+   surf_flux = 0.
    do i=il,ih
-!KB      call model%get_surface_sources(jl,jh,i,dy(jl:jh,i,k)
+      call model%get_surface_sources(jl,jh,i,surf_flux(jl:jh,i,:))
    end do
 
    ! here the pelagic is updated
+   interior_sms = 0.
    do k=1,ilo
       do i=il,ih
-         call model%get_interior_sources(jl,jh,i,k,dy(jl:jh,i,k)
+         call model%get_interior_sources(jl,jh,i,k,interior_sms(jl:jh,i,k,:))
       end do
    end do
 
    ! here the bottom is updated
+   bott_flux = 0.
+   bott_sms = 0.
    do i=il,ih
-!KB      call model%get_bottom_sources(jl,jh,i,dy(jl:jh,i,k)
+      call model%get_bottom_sources(jl,jh,i,bott_flux(jl:jh,i,:),bott_sms(jl:jh,i,:))
    end do
-
-#endif   
 
    call model%finalize_outputs()
 
@@ -360,6 +361,18 @@ subroutine allocate_fabm(myid,m,n,ilo,nbio,nsed)
 
    allocate(bindx(m,n),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bindx)'
+
+   allocate(surf_flux(m,n,nbio),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (surf_flux)'
+
+   allocate(interior_sms(m,n,ilo,nbio),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (interior_sms)'
+
+   allocate(bott_flux(m,n,nbio),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_flux)'
+
+   allocate(bott_sms(m,n,nsed),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_sms)'
 
    return
 end subroutine allocate_fabm
