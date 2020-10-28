@@ -28,8 +28,9 @@ endif()
 
 add_definitions(-DSATLAS)
 add_definitions(-DSASCII)
-add_definitions(-DCARA)
-add_definitions(-DNOFISH)
+#add_definitions(-DCARA)
+#add_definitions(-DNOFISH)  i don't think those are needed in the Fabm-ecosmo version  UD
+add_definitions(-DMPIP)
 add_compile_options(-pg -g -fpe0 -traceback -check all -debug extended)
 #add_compile_options(-pg -g -fbacktrace -fcheck=all -ffpe-trap=zero,overflow,underflow)
 
@@ -69,7 +70,7 @@ elseif(${CMAKE_Fortran_COMPILER_ID} STREQUAL "Intel")
 elseif(${CMAKE_Fortran_COMPILER_ID} STREQUAL "Cray")
   set (CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -N 1023")
 endif()
----]]
+#---]]
 
 # Compile library
 add_library(hamsom
