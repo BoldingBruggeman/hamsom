@@ -2317,6 +2317,7 @@ c-------------------------------------------------------------------
        inumeintr=numeintr+3  
 cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
       read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
+c      read(nfuriv,'(225e16.7)')iijahr,iimonth,iiday,
      &(rivinp(num),num=1,numeintr)
        if(myid.eq.0)then
        print*,'read riv: ', iijahr,iimonth,iiday,
@@ -2326,8 +2327,11 @@ cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
        end 
 
 c---------------------------------------------------------------------------------------
+#ifdef _FABM_
       subroutine change_units(f,n_choice,inbio)
       include 'C_model.f'
+      include 'C_nbio_fabm.f'
+      
       parameter (ips=3,ipl=4,ibg=15,izs=5,izl=6,idet=7,inh4=8,
      &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
      &ised1=1,ised2=2,ised3=3,imb1=4)
@@ -2388,4 +2392,4 @@ c         bio_out(l,idom)=f(l,idom)  !dom ==det
        enddo !l=1,nrei
        endif
        end 
-
+#endif

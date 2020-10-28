@@ -3338,6 +3338,11 @@ c
 c-----------------------------------------------------------------------
       include 'C_model.f'
       include 'C_index.f'
+#ifdef _FABM_
+      include 'C_nbio_fabm.f'
+#else
+      include 'C_nbio.f'
+#endif
       
       parameter(ilop1=ilo+1) 
       parameter(khor1=khor+1)
