@@ -20,6 +20,9 @@ c----------------------------------------------------------------------
 #endif
 #ifdef _FABM_
       use hamsom_fabm
+      include 'C_nbio_fabm.f'
+#else
+      include 'C_nbio.f'
 #endif
       include 'C_model.f'
       include 'C_index.f'
@@ -392,6 +395,8 @@ c      character*16 rivinp_bio
 #endif
 
 #ifdef _FABM_
+cUD bottom shear stress
+      dimension taubot(khor),taubot_2d(m,n)
       integer ivar
       call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
 #endif
@@ -437,7 +442,8 @@ c      ppp:    characteristic character for the run (input/output names)
 c      avmax:	   max. vertical exchange coefficient
 c      read_pah:   max. horizontal exchange coefficient
 c-----------------------------i------------------------------------------
-       ppp='ttt'
+       ppp='tt1'
+cKB       ppp='ttt'
 c       open(42,file='input_'//ppp)
 cc	open(42,file='input_t03')
 c       read (42,*) ijahr_start
@@ -2058,7 +2064,7 @@ c-----------------------------------------------------------------------
 #endif
 #ifdef _FABM_  
        call initialize_fabm(myid,lazc,iwet,indend,icord,pd2,
-     &                      Tc,Tsed,einstr)
+     &                      Tc,Tsed,einstr,taubot_2d)
 #endif
 
 c***********************************************************************
@@ -2072,6 +2078,7 @@ c***********************************************************************
 
 
 cKB      do 2111 lmon=mona,mone
+cKB      do 2111 lmon=1,12
       do 2111 lmon=1,1
       igstep1 = 0
       it_init = 0
@@ -3515,6 +3522,13 @@ c-----------------------------------------------------
 c  calculate biology 
 c---------------------------------------------------
 #ifdef _FABM_
+cUD    calculate bottom shear stress
+      call schubsp(taubot)
+#ifdef MPI
+      call deco1d2d_s(taubot_2d,taubot,iwet,indend,1.)
+#else
+      call deco1d2d(taubot_2d,taubot,iwet,indend,1.)
+#endif
       call update_fabm(myid,Tc,Tsed)
 #endif
 
@@ -4454,11 +4468,13 @@ c-----------------------------------------------------------------------
      & file=pathpc2//pathout//startfile//'_start'
      &,form='unformatted')
        endif
-
+#ifdef _FABM_
        if(lmon .eq. 12) close(nout_start)
 !this need to be fixed Ute 26.5.20 adjust number of output parameters
        call combine_output_bio(nout_b,pathout,monat,ppp,
-     & mjar,icord,itagend,nout_start,lmon,toutsteps,5)  !npel=5 hardcoded
+c     & mjar,icord,itagend,nout_start,lmon,toutsteps,5)  !npel=5 hardcoded
+     & mjar,icord,itagend,nout_start,lmon,toutsteps,nbio+nsed)  !npel=5 hardcoded
+#endif
        endif
        CALL MPI_BARRIER(MPI_COMM_WORLD,IERR)
 #endif

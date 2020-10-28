@@ -112,9 +112,9 @@ end subroutine configure_fabm
 !-----------------------------------------------------------------------
 
 #ifndef MPI
-subroutine initialize_fabm(lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
+subroutine initialize_fabm(lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
 #else
-subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
+subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
    integer, intent(in) :: myid
 #endif
    integer, intent(in) :: lazc(:),iwet(:),indend(:),icord(:,:)
@@ -122,7 +122,7 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
    real, intent(in) :: Tc(:,:)
    real, intent(in) :: Tsed(:,:)
    real, intent(in) :: einstr(:,:)
-!   real, intent(in) :: taubot1(:)
+   real, intent(in) :: taubot(:,:)
 
    integer :: ndrei,nbio,nsed,khor
    integer :: i,j,k,l
@@ -192,7 +192,7 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
          if(bindx(j,i) .gt. 0) mask(j,i,1:bindx(j,i)) = .true.
       end do
    end do
-!KB   call print_mask(myid,m,n,icord)
+   call print_mask(myid,m,n,icord)
 
    ! to save some typing
    jl = icord(myid+1,1)
@@ -216,7 +216,7 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
    call model%link_horizontal_data(fabm_standard_variables%surface_downwelling_shortwave_flux, einstr(1:m,1:n))
 !   call model%link_horizontal_data(standard_variables%wind_speed,wspd_fabm(1:ii, 1:jj))
 !   call model%link_horizontal_data(standard_variables%mole_fraction_of_carbon_dioxide_in_air,atmco2_fabm(1:ii,1:jj))
-!KB-JB   call model%link_horizontal_data(fabm_standard_variables%bottom_stress, bottom_stress(jl:jh,il:ih))
+   call model%link_horizontal_data(fabm_standard_variables%bottom_stress, taubot(1:m,1:n))
 
    call model%link_interior_data(fabm_standard_variables%temperature, pelagic(:,:,:,1))
    call model%link_interior_data(fabm_standard_variables%practical_salinity, pelagic(:,:,:,2))
@@ -231,10 +231,9 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr)
    end do
 
    call model%start()
-!KB
-   ! only if not restart
-#if 0
-   do k=i,ilo
+!KB - check this - only if not restart
+#if 1
+   do k=1,ilo
       do i=il,ih
          call model%initialize_interior_state(jl,jh,i,k)
       end do      
@@ -283,6 +282,9 @@ subroutine update_fabm(myid,Tc,Tsed)
    ! here the surface is updated
    surf_flux = 0.
    do i=il,ih
+!KBwrite(*,*) myid,jl,jh,i
+!KBwrite(*,*) model%status
+!KBstop 'kaj-kurt'
       call model%get_surface_sources(jl,jh,i,surf_flux(jl:jh,i,:))
    end do
 
@@ -290,6 +292,7 @@ subroutine update_fabm(myid,Tc,Tsed)
    interior_sms = 0.
    do k=1,ilo
       do i=il,ih
+!KBwrite(*,*) 'AA',jl,jh,i,k
          call model%get_interior_sources(jl,jh,i,k,interior_sms(jl:jh,i,k,:))
       end do
    end do
@@ -312,6 +315,7 @@ subroutine update_fabm(myid,Tc,Tsed)
    end do
    do l=1,nsed
 #ifdef MPI
+      call comp2d1d(sediment(:,:,l),Tsed(:,l))
 !KB      call comp2d1d_s(sediment(:,:,l),Tsed(:,l))
 #else
       call comp2d1d(sediment(:,:,l),Tsed(:,l))
@@ -344,6 +348,7 @@ subroutine allocate_fabm(myid,m,n,ilo,nbio,nsed)
 
    allocate(bottom_stress(m,n),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bottom_stress)'
+
    allocate(h(m,n,ilo),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (h)'
 
@@ -362,13 +367,14 @@ subroutine allocate_fabm(myid,m,n,ilo,nbio,nsed)
    allocate(bindx(m,n),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bindx)'
 
-   allocate(surf_flux(m,n,nbio),stat=stat)
+   allocate(surf_flux(m,n,nbio-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (surf_flux)'
 
-   allocate(interior_sms(m,n,ilo,nbio),stat=stat)
+!KB   allocate(interior_sms(m,n,ilo,3:nbio),stat=stat)
+   allocate(interior_sms(m,n,ilo,nbio-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (interior_sms)'
 
-   allocate(bott_flux(m,n,nbio),stat=stat)
+   allocate(bott_flux(m,n,nbio-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_flux)'
 
    allocate(bott_sms(m,n,nsed),stat=stat)
