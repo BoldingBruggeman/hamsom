@@ -2063,7 +2063,7 @@ c-----------------------------------------------------------------------
 	  write(outfile1(4:5),'(i2.2)') mjar
 #endif
 #ifdef _FABM_  
-       call initialize_fabm(myid,lazc,iwet,indend,icord,pd2,
+       call initialize_fabm(myid,deltat,lazc,iwet,indend,icord,pd2,
      &                      Tc,Tsed,einstr,taubot_2d)
 #endif
 
@@ -3531,7 +3531,7 @@ cUD    calculate bottom shear stress
 #else
       call deco1d2d(taubot_2d,taubot,iwet,indend,1.)
 #endif
-      call update_fabm(myid,Tc,Tsed)
+      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed)
 #endif
 
 c-----par rausschreiben--------------------------------------

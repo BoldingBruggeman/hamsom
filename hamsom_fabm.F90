@@ -3,7 +3,6 @@ module hamsom_fabm
 #ifdef _FABM_
 
 use fabm
-!KBuse fabm_types, only: attribute_length, output_none
 use fabm_types
 #define DEBUG
 #ifdef DEBUG
@@ -36,15 +35,12 @@ private
    real, allocatable, dimension(:,:,:), target :: bott_flux 
    real, allocatable, dimension(:,:,:), target :: bott_sms
 
-   ! use pointers to HAMSOM state and environmental variables
-   real, dimension(:,:,:), pointer :: pT, pS
 #ifndef MPI
    integer :: myid=0
 #endif
 
    integer :: il,ih,jl,jh
 
-!   public configure_fabm, allocate_fabm, initialize_fabm, update_fabm, clean_fabm
    public configure_fabm, initialize_fabm, update_fabm, clean_fabm
    public fabm_var_index
 
@@ -85,9 +81,6 @@ subroutine configure_fabm(myid,m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
 
    call allocate_fabm(myid,m,n,ilo,nbio,nsed)
 
-   ivar = fabm_var_index('oxy')
-   write(*,*) 'ivar ',ivar
-
    if (myid .eq. 0) then
       do ivar=1,size(model%interior_state_variables)
          write(fabmunit,*) ivar,trim(model%interior_state_variables(ivar)%name)
@@ -104,11 +97,12 @@ end subroutine configure_fabm
 !-----------------------------------------------------------------------
 
 #ifndef MPI
-subroutine initialize_fabm(lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
+subroutine initialize_fabm(lazc,dt,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
 #else
-subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
+subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
    integer, intent(in) :: myid
 #endif
+   real, intent(in) :: dt
    integer, intent(in) :: lazc(:),iwet(:),indend(:),icord(:,:)
    real, intent(in) :: pd2(:,:,:)
    real, intent(in) :: Tc(:,:)
@@ -116,10 +110,8 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
    real, intent(in) :: einstr(:,:)
    real, intent(in) :: taubot(:,:)
 
-!KB   integer :: ndrei,nbio,nsed,khor
    integer :: i,j,k,l
    integer :: ivar
-!KB   type (type_horizontal_variable_id) :: id_swr
 
    write(fabmunit,*) 'initialize_fabm()',myid
 
@@ -135,30 +127,6 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
        write(fabmunit,*) size(Tsed),shape(Tsed),rank(Tsed)
        write(fabmunit,*) lbound(Tsed),ubound(Tsed)
    end if
-
-#if 0
-   ! all sizes are picked up by the arrays holding the data in HAMSOM
-   ! will allow to use any supported version of ECOSMO - note variable_order
-   m = size(pelagic,1)
-   n = size(pelagic,2)
-   ilo = size(pelagic,3)
-   khor = size(lazc)
-   ndrei = size(Tc,1)
-   nbio = size(Tc,2)
-   nsed = size(Tsed,2)
-#endif
-
-#if 1
-   if(myid .eq. 0) then
-       write(fabmunit,*) 'AA m=     ',m
-       write(fabmunit,*) 'AA n=     ',n
-       write(fabmunit,*) 'AA ilo=   ',ilo
-       write(fabmunit,*) 'AA khor=  ',khor
-       write(fabmunit,*) 'AA ndrei= ',ndrei
-       write(fabmunit,*) 'AA nbio=  ',nbio
-       write(fabmunit,*) 'AA nsed=  ',nsed
-   end if
-#endif
 
    ! FABM pelagics is being 'initialized'
    pelagic = -10.
@@ -196,16 +164,18 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
    il = icord(myid+1,3)
    ih = icord(myid+1,4)
 
-   call model%set_domain(m,n,ilo)
+   call model%set_domain(m,n,ilo,dt)
    call model%set_domain_start(jl,il,1)
    call model%set_domain_stop(jh,ih,ilo) 
    call model%set_bottom_index(bindx(:,:))
    call model%set_mask(mask,mask(:,:,1))
 
-!KB   write(*,*) jl,jh
-!KB   write(*,*) il,ih
-!KB   write(*,*) 1,ilo
-!KB   write(*,*) size(pd2(1:m,1:n,1:ilo))
+#if 0
+   write(*,*) jl,jh
+   write(*,*) il,ih
+   write(*,*) 1,ilo
+   write(*,*) size(pd2(1:m,1:n,1:ilo))
+#endif
    call model%link_interior_data(fabm_standard_variables%cell_thickness, pd2(1:m,1:n,1:ilo))
 
    ! set pointers to environmental forcing
@@ -237,16 +207,16 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
 !   call model%initialize_bottom_state()
 #endif   
 
-#ifdef DEBUG
-#endif
-
    return
 end subroutine initialize_fabm
 
 !-----------------------------------------------------------------------
 
-subroutine update_fabm(myid,Tc,Tsed)
+subroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed)
    integer, intent(in) :: myid
+   integer, intent(in) :: imal
+   real, intent(in) :: dt
+   integer, intent(in) :: iwet(:),indend(:)
    real, dimension(:,:), intent(inout) :: Tc
    real, dimension(:,:), intent(inout) :: Tsed
 
@@ -256,18 +226,6 @@ subroutine update_fabm(myid,Tc,Tsed)
       write(*,*) 'update_fabm()'
    end if
 
-#if 1
-   if(myid .eq. 0) then
-       write(fabmunit,*) 'BB m=     ',m
-       write(fabmunit,*) 'BB n=     ',n
-       write(fabmunit,*) 'BB ilo=   ',ilo
-       write(fabmunit,*) 'BB khor=  ',khor
-       write(fabmunit,*) 'BB ndrei= ',ndrei
-       write(fabmunit,*) 'BB nbio=  ',nbio
-       write(fabmunit,*) 'BB nsed=  ',nsed
-   end if
-#endif
-
    do l=1,nbio
 #ifdef MPI
       call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
@@ -275,27 +233,21 @@ subroutine update_fabm(myid,Tc,Tsed)
       call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
 #endif
    end do
-!write(myid+20,*) pelagic(:,:,:,1)
-!write(myid+40,*) pelagic(:,:,:,2)
-!stop
    do l=1,nsed
 #ifdef MPI
-      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),khor)
+      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
 #else
-      call deco1d2d(sediment(:,:,l),Tsed(:,l),khor)
+      call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
 #endif
    end do
 
-   call model%prepare_inputs()
+   call model%prepare_inputs(t=imal*dt)
 
 ! get_vertical_move - maybe send individually
 
    ! here the surface is updated
    surf_flux = 0.
    do i=il,ih
-!KBwrite(*,*) myid,jl,jh,i
-!KBwrite(*,*) model%status
-!KBstop 'kaj-kurt'
       call model%get_surface_sources(jl,jh,i,surf_flux(jl:jh,i,:))
    end do
 
@@ -303,7 +255,6 @@ subroutine update_fabm(myid,Tc,Tsed)
    interior_sms = 0.
    do k=1,ilo
       do i=il,ih
-!KBwrite(*,*) 'AA',jl,jh,i,k
          call model%get_interior_sources(jl,jh,i,k,interior_sms(jl:jh,i,k,:))
       end do
    end do
