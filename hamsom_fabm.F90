@@ -51,18 +51,26 @@ private
 contains
 
 #ifndef MPI
-subroutine configure_fabm(m,n,ilo,khor,ndrei,nbio,nsed)
+subroutine configure_fabm(m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
 #else
-subroutine configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
+subroutine configure_fabm(myid,m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
    integer, intent(in) :: myid
 #endif
-   integer, intent(in) :: m,n,ilo ! y (m -> from north), x (n -> from west), z (ilo -> from top)
-   integer, intent(in) :: khor
-   integer, intent(in) :: ndrei
-   integer, intent(in) :: nbio
-   integer, intent(in) :: nsed
+   integer, intent(in) :: m_,n_,ilo_ ! y (m -> from north), x (n -> from west), z (ilo -> from top)
+   integer, intent(in) :: khor_
+   integer, intent(in) :: ndrei_
+   integer, intent(in) :: nbio_
+   integer, intent(in) :: nsed_
 
    integer :: ivar,nvar
+
+   m=m_
+   n=n_
+   ilo=ilo_
+   ndrei=ndrei_
+   khor=khor_
+   nbio=nbio_
+   nsed=nsed_
 
    if (myid .eq. 0) then
       write(fabmunit,*) 'configure_fabm()'
@@ -90,22 +98,6 @@ subroutine configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
          write(fabmunit,*) ivar,trim(model%bottom_state_variables(ivar)%name)
       end do
    end if
-#if 0
-      select case (model%state_variables(ivar)%name)
-      case('no3')
-      case('nh4')
-      case('pho')
-      case('sil')
-      case('oxy')
-      case('fla')
-      case('dia')
-      case('bg')
-      case('')
-      case('pho')
-      case('pho')
-      case('pho')
-      case('pho')
-#endif   
    return
 end subroutine configure_fabm
 
@@ -124,7 +116,7 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
    real, intent(in) :: einstr(:,:)
    real, intent(in) :: taubot(:,:)
 
-   integer :: ndrei,nbio,nsed,khor
+!KB   integer :: ndrei,nbio,nsed,khor
    integer :: i,j,k,l
    integer :: ivar
 !KB   type (type_horizontal_variable_id) :: id_swr
@@ -144,6 +136,7 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
        write(fabmunit,*) lbound(Tsed),ubound(Tsed)
    end if
 
+#if 0
    ! all sizes are picked up by the arrays holding the data in HAMSOM
    ! will allow to use any supported version of ECOSMO - note variable_order
    m = size(pelagic,1)
@@ -153,16 +146,19 @@ subroutine initialize_fabm(myid,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot
    ndrei = size(Tc,1)
    nbio = size(Tc,2)
    nsed = size(Tsed,2)
+#endif
 
+#if 1
    if(myid .eq. 0) then
-       write(fabmunit,*) 'm=     ',m
-       write(fabmunit,*) 'n=     ',n
-       write(fabmunit,*) 'ilo=   ',ilo
-       write(fabmunit,*) 'khor=  ',khor
-       write(fabmunit,*) 'ndrei= ',ndrei
-       write(fabmunit,*) 'nbio=  ',nbio
-       write(fabmunit,*) 'nsed=  ',nsed
+       write(fabmunit,*) 'AA m=     ',m
+       write(fabmunit,*) 'AA n=     ',n
+       write(fabmunit,*) 'AA ilo=   ',ilo
+       write(fabmunit,*) 'AA khor=  ',khor
+       write(fabmunit,*) 'AA ndrei= ',ndrei
+       write(fabmunit,*) 'AA nbio=  ',nbio
+       write(fabmunit,*) 'AA nsed=  ',nsed
    end if
+#endif
 
    ! FABM pelagics is being 'initialized'
    pelagic = -10.
@@ -260,6 +256,18 @@ subroutine update_fabm(myid,Tc,Tsed)
       write(*,*) 'update_fabm()'
    end if
 
+#if 1
+   if(myid .eq. 0) then
+       write(fabmunit,*) 'BB m=     ',m
+       write(fabmunit,*) 'BB n=     ',n
+       write(fabmunit,*) 'BB ilo=   ',ilo
+       write(fabmunit,*) 'BB khor=  ',khor
+       write(fabmunit,*) 'BB ndrei= ',ndrei
+       write(fabmunit,*) 'BB nbio=  ',nbio
+       write(fabmunit,*) 'BB nsed=  ',nsed
+   end if
+#endif
+
    do l=1,nbio
 #ifdef MPI
       call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
@@ -267,6 +275,9 @@ subroutine update_fabm(myid,Tc,Tsed)
       call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
 #endif
    end do
+!write(myid+20,*) pelagic(:,:,:,1)
+!write(myid+40,*) pelagic(:,:,:,2)
+!stop
    do l=1,nsed
 #ifdef MPI
       call deco1d2d_s(sediment(:,:,l),Tsed(:,l),khor)
