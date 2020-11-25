@@ -33,7 +33,7 @@ private
    real, allocatable, dimension(:,:,:), target :: surf_sms 
    real, allocatable, dimension(:,:,:,:), target :: interior_sms
    real, allocatable, dimension(:,:,:), target :: bott_flux 
-   real, allocatable, dimension(:,:,:), target :: bott_sms
+   real, allocatable, dimension(:,:,:), target :: bottom_sms
 
 #ifndef MPI
    integer :: myid=0
@@ -212,20 +212,26 @@ end subroutine initialize_fabm
 
 !-----------------------------------------------------------------------
 
-subroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed)
+!KBsubroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed,dTc,dTsed)
+subroutine update_fabm(myid,imal,iwet,indend,Tc,Tsed,dTc,dTsed)
    integer, intent(in) :: myid
    integer, intent(in) :: imal
-   real, intent(in) :: dt
+!KB   real, intent(in) :: dt
    integer, intent(in) :: iwet(:),indend(:)
    real, dimension(:,:), intent(inout) :: Tc
    real, dimension(:,:), intent(inout) :: Tsed
+   real, dimension(:,:), intent(inout) :: dTc
+   real, dimension(:,:), intent(inout) :: dTsed
 
    integer :: i,j,k,l
+   real :: decode_timing=0.,decode_start,decode_stop
+   real :: fabm_timing=0.,fabm_start,fabm_stop
+   real :: encode_timing=0.,encode_start,encode_stop
 
    if (myid .eq. 0) then
       write(*,*) 'update_fabm()'
    end if
-
+call cpu_time(decode_start)
    do l=1,nbio
 #ifdef MPI
       call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
@@ -240,8 +246,11 @@ subroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed)
       call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
 #endif
    end do
+call cpu_time(decode_stop)
+decode_timing=decode_timing+decode_stop-decode_start
 
-   call model%prepare_inputs(t=imal*dt)
+call cpu_time(fabm_start)
+   call model%prepare_inputs(t=real(imal,rk))
 
 ! get_vertical_move - maybe send individually
 
@@ -261,28 +270,37 @@ subroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed)
 
    ! here the bottom is updated
    bott_flux = 0.
-   bott_sms = 0.
+   bottom_sms = 0.
    do i=il,ih
-      call model%get_bottom_sources(jl,jh,i,bott_flux(jl:jh,i,:),bott_sms(jl:jh,i,:))
+      call model%get_bottom_sources(jl,jh,i,bott_flux(jl:jh,i,:),bottom_sms(jl:jh,i,:))
    end do
 
    call model%finalize_outputs()
+call cpu_time(fabm_stop)
+fabm_timing=fabm_timing+fabm_stop-fabm_start
 
+call cpu_time(encode_start)
    do l=3,nbio
 #ifdef MPI
-      call comp3d1d_s(pelagic(:,:,:,l),Tc(:,l))
+      call comp3d1d_s(interior_sms(:,:,:,l),dTc(:,l))
 #else
-      call comp3d1d(pelagic(:,:,:,l),Tc(:,l))
+      call comp3d1d(interior_sms(:,:,:,l),dTc(:,l))
 #endif
    end do
    do l=1,nsed
 #ifdef MPI
-      call comp2d1d(sediment(:,:,l),Tsed(:,l))
+      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
 !KB      call comp2d1d_s(sediment(:,:,l),Tsed(:,l))
 #else
-      call comp2d1d(sediment(:,:,l),Tsed(:,l))
+      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
 #endif
    end do
+call cpu_time(encode_stop)
+encode_timing=encode_timing+encode_stop-encode_start
+
+write(100+myid,*) 'decode: ',myid,decode_timing
+write(100+myid,*) 'fabm:   ',myid,fabm_timing
+write(100+myid,*) 'encode: ',myid,encode_timing
 
    return
 end subroutine update_fabm
@@ -339,7 +357,7 @@ subroutine allocate_fabm(myid,m,n,ilo,nbio,nsed)
    allocate(bott_flux(m,n,nbio-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_flux)'
 
-   allocate(bott_sms(m,n,nsed),stat=stat)
+   allocate(bottom_sms(m,n,nsed),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_sms)'
 
    return
