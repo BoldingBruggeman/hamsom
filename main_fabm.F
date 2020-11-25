@@ -307,8 +307,8 @@ c		T_4d:variables NPZD module+ temperature and salinity
 c		bio_riv: nutrient loads from rivers
 c------------------------------------------------------------------------------
 
-      common /T_4d/ Tc(ndrei,nbio) !Tc_mit(ndrei,nbio+nsed)
-      common /ben_4d/ Tsed(ndrei,nsed)
+      common /T_4d/ Tc(ndrei,nbio),dTc(ndrei,nbio) !Tc_mit(ndrei,nbio+nsed)
+      common /ben_4d/ Tsed(ndrei,nsed),dTsed(ndrei,nsed)
 c      common /bio_riv/riv_bio(nbio,nanz),
 c     &		     zriv_bio(nbio,m,n)
 
@@ -3531,7 +3531,36 @@ cUD    calculate bottom shear stress
 #else
       call deco1d2d(taubot_2d,taubot,iwet,indend,1.)
 #endif
-      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed)
+!KB      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed,dTc,dTsed)
+      call update_fabm(myid,imal,iwet,indend,Tc,Tsed,dTc,dTsed)
+! apply the returned increments
+#ifndef MPI
+      do nwet=1,ndrei
+         do ibio=3,nbio
+            Tc(nwet,ibio)=Tc(nwet,ibio)+dTc(nwet,ibio)*deltat
+         enddo
+         do ised=1,nsed
+            Tsed(nwet,ised)=Tsed(nwet,ised)+dTsed(nwet,ised)*deltat
+         enddo
+      enddo
+#else
+      do J=J1,J2
+         lwa=lb0(J)
+         lwe=le0(J)
+         if(lwe .ge. lwa) then
+            nwet1=indwet(lwa)+1
+            nwet2=indwet(lwe)+lazc(lwe)
+            do k=nwet1,nwet2
+               do ibio=3,nbio
+                  Tc(k,ibio)=Tc(k,ibio)+dTc(k,ibio)*deltat
+               enddo
+               do ised=1,nsed
+                  Tsed(k,ised)=Tsed(k,ised)+dTsed(k,ised)*deltat
+               enddo
+            enddo
+         endif
+      enddo
+#endif
 #endif
 
 c-----par rausschreiben--------------------------------------
