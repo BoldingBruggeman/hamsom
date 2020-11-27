@@ -280,12 +280,14 @@ call cpu_time(fabm_start)
    ! fold the surface and bottom flux terms
    do i=il,ih
       do j=jl,jh
-         ! surface
-         k=1
-!KB         interior_sms(j,i,k,:)=interior_sms(j,i,k,:)+surf_flux(j,i,:)/pd2(j,i,k)
-         ! bottom
-         k=ltief(j,i)
-!KB         interior_sms(j,i,1,:)=interior_sms(j,i,1,:)+bott_flux(j,i,:)/pd2(j,i,k)
+         if (ltief(j,i) /= 0) then
+            ! surface
+            k=1
+            interior_sms(j,i,k,:)=interior_sms(j,i,k,:)+surf_flux(j,i,:)/pd2(j,i,k)
+            ! bottom
+            k=ltief(j,i)
+            interior_sms(j,i,k,:)=interior_sms(j,i,k,:)+bott_flux(j,i,:)/pd2(j,i,k)
+         end if
       end do
    end do
 
