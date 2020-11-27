@@ -2063,8 +2063,8 @@ c-----------------------------------------------------------------------
 	  write(outfile1(4:5),'(i2.2)') mjar
 #endif
 #ifdef _FABM_  
-       call initialize_fabm(myid,deltat,lazc,iwet,indend,icord,pd2,
-     &                      Tc,Tsed,einstr,taubot_2d)
+       call initialize_fabm(myid,deltat,lazc,iwet,indend,icord,
+     &                      pd2(:,:,1:ilo),Tc,Tsed,einstr,taubot_2d)
 #endif
 
 c***********************************************************************
@@ -3531,8 +3531,26 @@ cUD    calculate bottom shear stress
 #else
       call deco1d2d(taubot_2d,taubot,iwet,indend,1.)
 #endif
+#ifdef MPI
+      do J=J1,J2
+      lwa = lb0(J)
+      lwe = le0(J)
+#else
+      do j=1,n
+      lwa = lwe+1
+      lwe = indend(j)
+#endif
+      do lw=lwa,lwe
+        i = iwet(lw)
+        lump = lazc(lw)
+        pd2(i,j,1)= (pd(1)+zac(lw))
+        if(lump.eq.1) pd2(i,j,1)=float( ldep(lw) )+zac(lw)
+      enddo
+      enddo
+
 !KB      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed,dTc,dTsed)
-      call update_fabm(myid,imal,iwet,indend,Tc,Tsed,dTc,dTsed)
+      call update_fabm(myid,imal,iwet,indend,ltief,pd2(:,:,1:ilo),
+     &                 Tc,Tsed,dTc,dTsed)
 ! apply the returned increments
 #ifndef MPI
       do nwet=1,ndrei

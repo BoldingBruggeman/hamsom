@@ -189,7 +189,8 @@ subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,tau
 
    ! link to pelagic state variables
    do ivar = 1,size(model%interior_state_variables)
-      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar+2))
+!KB      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar+2))
+      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar))
    end do
    ! link to benthic state variables
    do ivar = 1,size(model%bottom_state_variables)
@@ -213,11 +214,12 @@ end subroutine initialize_fabm
 !-----------------------------------------------------------------------
 
 !KBsubroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed,dTc,dTsed)
-subroutine update_fabm(myid,imal,iwet,indend,Tc,Tsed,dTc,dTsed)
+subroutine update_fabm(myid,imal,iwet,indend,ltief,pd2,Tc,Tsed,dTc,dTsed)
    integer, intent(in) :: myid
    integer, intent(in) :: imal
 !KB   real, intent(in) :: dt
-   integer, intent(in) :: iwet(:),indend(:)
+   integer, intent(in) :: iwet(:),indend(:),ltief(:,:)
+   real, dimension(:,:,:), intent(inout) :: pd2
    real, dimension(:,:), intent(inout) :: Tc
    real, dimension(:,:), intent(inout) :: Tsed
    real, dimension(:,:), intent(inout) :: dTc
@@ -275,6 +277,18 @@ call cpu_time(fabm_start)
       call model%get_bottom_sources(jl,jh,i,bott_flux(jl:jh,i,:),bottom_sms(jl:jh,i,:))
    end do
 
+   ! fold the surface and bottom flux terms
+   do i=il,ih
+      do j=jl,jh
+         ! surface
+         k=1
+!KB         interior_sms(j,i,k,:)=interior_sms(j,i,k,:)+surf_flux(j,i,:)/pd2(j,i,k)
+         ! bottom
+         k=ltief(j,i)
+!KB         interior_sms(j,i,1,:)=interior_sms(j,i,1,:)+bott_flux(j,i,:)/pd2(j,i,k)
+      end do
+   end do
+
    call model%finalize_outputs()
 call cpu_time(fabm_stop)
 fabm_timing=fabm_timing+fabm_stop-fabm_start
@@ -282,9 +296,9 @@ fabm_timing=fabm_timing+fabm_stop-fabm_start
 call cpu_time(encode_start)
    do l=3,nbio
 #ifdef MPI
-      call comp3d1d_s(interior_sms(:,:,:,l),dTc(:,l))
+      call comp3d1d_s(interior_sms(:,:,:,l-2),dTc(:,l))
 #else
-      call comp3d1d(interior_sms(:,:,:,l),dTc(:,l))
+      call comp3d1d(interior_sms(:,:,:,l-2),dTc(:,l))
 #endif
    end do
    do l=1,nsed
