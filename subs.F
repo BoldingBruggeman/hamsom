@@ -2316,8 +2316,8 @@ c-------------------------------------------------------------------
       
        inumeintr=numeintr+3  
 cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
-      read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
-c      read(nfuriv,'(225e16.7)')iijahr,iimonth,iiday,
+c      read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
+      read(nfuriv,'(225e16.7)')iijahr,iimonth,iiday,
      &(rivinp(num),num=1,numeintr)
        if(myid.eq.0)then
        print*,'read riv: ', iijahr,iimonth,iiday,
@@ -2336,7 +2336,7 @@ c-------------------------------------------------------------------------------
      &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
      &ised1=1,ised2=2,ised3=3,imb1=4)
       dimension f(ndrei,*)
-      common /bio_out/bio_out(ndrei,nbio+nsed)  !npel
+      common /bio_out/bio_out(ndrei,3:nbio+nsed) 
       real REDF(10)
 c/////redfield ratios/////
        DATA

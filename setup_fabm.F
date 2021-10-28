@@ -734,7 +734,166 @@ c		pause
 5      return 
        end 
 
+#ifdef _FABM_
 
+*��5 read_bio_bconditions
+c-----------------------------------------------------------------------
+      subroutine read_bio_bconditions (nfile,nfile2,nday,ijulu,month)
+c-----------------------------------------------------------------------
+c     boundary values for bio-variables 
+c-----------------------------------------------------------------------
+      include 'C_model.f'
+      include 'C_nbio_fabm.f'
+      include 'C_mpi.f'
+      parameter(khor1=khor+1)
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor), 
+     *  indend(n),isornr(n),isorsr(n),islab(n) 
+      
+      common /biobd/ bio_rum(lvrp,nbio)
+c      common /tscdb/ sarum(lvrp),tarum(lvrp),bio_rum(lvrp,nbio)
+c	common /tsc/ sarum_old(lvrp),tarum_old(lvrp)
+      common /urand/       zday(lrp),zvar(lrp),zalt(lrp)
+      common /uranddb/ zday_old(lrp),zvar_old(lrp)
+      common /liq_b/lq_b(iranz,5),lq_b2D(iranz*m),lq_b3D(iranz*m*ilo),
+     &  num_b(7),nul_p(6)
+      dimension pl(lrp,2),ps(lrp,2)
+
+
+      if(nday.eq.1)then
+      read(nfile,*,err=124) nwmonht
+      do l=1,lvrp
+      read(nfile,'( 11(1x, e12.6) )',err=124) (bio_rum(l,i),i=3,13)
+       bio_rum(l,14)=bio_rum(l,12)/20.  !...opal....
+      enddo
+      IF(myid .eq. 0)
+     &print*,' boundary values bio_bd  were read, month=',nwmonht
+c	call change_units_bd(bio_rum,1)
+
+      goto 1
+      
+
+ 124  write(*,*)'error in reading boundary values bio_bd, month=',
+     & nwmonht
+      pause
+      endif
+
+1     continue
+      goto 2
+      if(mod(ijulu-1,5).eq.0.and.ijulu.ne.366)then
+	write(*,*)'read bio boundary day,ijulu ',nday,ijulu
+      do i=10,lrp
+      read(nfile2,'(5(1x,f10.4))')ff,pl(i,1),pl(i,2),ps(i,1),ps(i,2)
+      enddo      
+	 
+      nwet=0
+
+	do lww=1,lrp
+      lump = lazc(lq_b2D(lww))
+      do k=1,lump
+      nwet=nwet+1
+	if(lww.ge.10)then
+	if(k.le.5)then
+	bio_rum(nwet,3)=ps(lww,1)
+	bio_rum(nwet,4)=pl(lww,1)
+	else
+	bio_rum(nwet,3)=ps(lww,2)
+	bio_rum(nwet,4)=pl(lww,2)
+      endif
+	if(k.gt.12)then
+	bio_rum(nwet,3)=0.0001
+	bio_rum(nwet,4)=0.0001
+      endif
+      endif
+      enddo
+	enddo	
+	if(month.eq.1.or.month.eq.12)then
+	do nwet=1,lvrp
+      bio_rum(nwet,3)=min(bio_rum(nwet,3),1.6)
+      bio_rum(nwet,4)=min(bio_rum(nwet,4),1.6)
+      enddo
+	endif
+	write(*,*)'read bio boundary were read'
+      endif
+      
+2     continue	
+c	do nwet=1,lvrp
+c	write(*,*)'nio_bc 10', bio_rum(nwet,10),nwet
+cc	pause
+c       enddo
+      return
+      end
+
+
+*��8 bioneu
+c-----------------------------------------------------------------------
+      subroutine bioneu (iindex,izet,time,ivar,ibio)
+c-----------------------------------------------------------------------
+      include 'C_model.f'
+      include 'C_nbio_fabm.f'
+      include 'C_mpi.f'
+c        include 'C_rbio.f'
+		  parameter(ilop1=ilo+1) 
+		  parameter(khor1=khor+1) 
+
+        dimension f(m,n,ilo)
+        dimension iindex(m,n),izet(m,n)
+      common /gitter/ dt,r,g,dl,dlr,dlrh,dln(m),rdln(m),rad,dth,
+     *  dlvo(m),dlvu(m),gh,rdt,dt2,r4,coru(m),corv(m),dtrdln(m),dtdlr
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),indend(n),
+     *             isornr(n),isorsr(n),islab(n)
+      common /liq_b/lq_b(iranz,5),lq_b2D(iranz*m),lq_b3D(iranz*m*ilo),
+     &  num_b(7),nul_p(6)
+      common /T_4d/ Tc(ndrei,nbio),dTc(ndrei,nbio),
+     &Tc_mit(ndrei,nbio+nsed)
+c      common /tscdb/ sarum(lvrp),tarum(lvrp),bio_rum(lvrp,nbio)
+      common /biobd/ bio_rum(lvrp,nbio)
+      integer ivar,ibio
+
+**** conditions for NO2, NO3, P, Si, O2 from WAO 01**********
+      if(ibio>0)then
+	do l=1,lvrp
+      Tc (lq_b3D(l),ivar)=bio_rum(l,ibio)
+   	enddo
+       endif
+! Zs,Zl,D,NH4 are not set, no external condition used
+
+
+c     Westrand
+      do i=156,164
+        l   = iindex(i,16)
+        ll  = iindex(i,17)
+        lll = iindex(i,18)
+        if(ibio.ge.10)lll = iindex(i,17)
+        if(ibio.eq.13)lll = iindex(i,18)
+
+        lw  = izet(i,16)
+                   lump=0
+        if(lw.gt.0)lump = lazc(lw)
+        do k=1,lump
+          Tc(l +k,ivar)  = Tc(lll+k,ivar)
+          Tc(ll+k,ivar)  = Tc(lll+k,ivar)
+        enddo
+      enddo
+
+
+c     Nordrand 
+      do j=12,57
+	  l   = iindex(66,j)
+        ll  = iindex(67,j)
+        lll = iindex(68,j)
+        if(ibio.ge.10)lll = iindex(67,j)
+        if(ibio.eq.13)lll = iindex(68,j)
+        lw  = izet(66,j)
+	             lump=0
+        if(lw.gt.0)lump = lazc(lw)
+        do k=1,lump
+          Tc(l +k,ivar)  = Tc(lll+k,ivar)
+          Tc(ll+k,ivar)  = Tc(lll+k,ivar)
+       enddo
+      enddo
+
+       end 
+#endif
 
 *��9 uvrand
 c-----------------------------------------------------------------------

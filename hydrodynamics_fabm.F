@@ -3901,9 +3901,9 @@ c south
 c#ifndef ECO2
 *Correction#4
 *----- add the joint river and P-E fluxes of the characteristics ibio=1,nbio--------
-c      if (k.eq.1) then
-c      XYadv(ll,ibio)=XYadv(ll,ibio)+Tc_flux_all(llw(ll),ibio)/dd(ll)
-c      endif
+c       if (k.eq.1) then
+c       XYadv(ll,ibio)=XYadv(ll,ibio)+Tc_flux_all(llw(ll),ibio)/dd(ll)
+c       endif
 
 c#endif
 
