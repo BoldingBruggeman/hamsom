@@ -406,20 +406,19 @@ function fabm_var_index(varname) result(nvar)
    return
 end function fabm_var_index
 
-!-----------------------------------------------------------------------
-
 subroutine print_mask(myid,m,n,icord)
    integer, intent(in) :: myid
    integer, intent(in) :: m,n
    integer, intent(in) :: icord(:,:)
-   integer :: i,j,l
+   integer :: i,j,l,ic
 
+   ic=size(icord,1)
    if (myid .eq. 0) then
       write(fabmunit,*) 'global mask'
       do j=1,m
          write(fabmunit,'(5000(L1))') (mask(j,i,1), i=1,n)
       end do
-      do l=1,18
+      do l=1,ic
          write(fabmunit,*) 'mask for domain# ',l
          write(fabmunit,*) icord(l,1),icord(l,2),icord(l,3),icord(l,4)
          do j=icord(l,1),icord(l,2)
