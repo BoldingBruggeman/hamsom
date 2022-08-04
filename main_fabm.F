@@ -419,7 +419,7 @@ cUD bottom shear stress
       logical apply_fabm, init_bio
       integer nfuriv(nbio)
       integer ivar
-      call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
+      call configure_fabm(myid,m,n,ilo,nbio,nsed)
       apply_fabm=.true.
       init_bio=.true.
       bio_rum(:,:)=0.
@@ -466,7 +466,7 @@ c      ppp:    characteristic character for the run (input/output names)
 c      avmax:	   max. vertical exchange coefficient
 c      read_pah:   max. horizontal exchange coefficient
 c-----------------------------i------------------------------------------
-       ppp='tx4'
+       ppp='tx7'
 cKB       ppp='ttt'
 c       open(42,file='input_'//ppp)
 cc	open(42,file='input_t03')
@@ -1782,51 +1782,39 @@ c---------------------------------------------------
 c--------------------------------------------------------------------------
 c      set Tc & Tsed and change units
 c--------------------------------------------------------------------------
-c       write(*,*) nbio,npel,nben
+        write(*,*) nbio !,npel,nben
 ccc-ute 160620-----change_units added to subs.F
 6576   continue
 !!!! use the same executable with and without fabm !!!
         if(init_bio)then
-        if(myid.eq.0)print*,'init_bio chunits',bio_out(1:10,10)
+        if(myid.eq.0)print*,'init_bio chunits',bio_out(1:10,ino3)
        inbio=size(bio_out,2)
        call change_units(bio_out,1,inbio)
-c        if(myid.eq.0)print*,'init_bio chunits 1',bio_out(1:10,10)
+        if(myid.eq.0)print*,'init_bio chunits 1',bio_out(1:10,ino3)
        do lw=1,ndrei
          ivar = fabm_var_index('fla')+2
-c         if(myid.eq.0)print*,'fla ',ivar
          Tc(lw,ivar)=bio_out(lw,ips)
          ivar = fabm_var_index('dia')+2
-c         if(myid.eq.0)print*,'dia ',ivar
          Tc(lw,ivar)=bio_out(lw,ipl)
          ivar = fabm_var_index('microzoo')+2
-c         if(myid.eq.0)print*,'micro ',ivar
          Tc(lw,ivar)=bio_out(lw,izs)
          ivar = fabm_var_index('mesozoo')+2
-c         if(myid.eq.0)print*,'meso ',ivar
          Tc(lw,ivar)=bio_out(lw,izl)
          ivar = fabm_var_index('det')+2
-c         if(myid.eq.0)print*,'det ',ivar
          Tc(lw,ivar)=bio_out(lw,idet)
          ivar = fabm_var_index('nh4')+2
-c         if(myid.eq.0)print*,'nh4 ',ivar
          Tc(lw,ivar)=bio_out(lw,inh4)
          ivar = fabm_var_index('dom')+2
-c         if(myid.eq.0)print*,'dom ',ivar
          Tc(lw,ivar)=bio_out(lw,idom)
          ivar = fabm_var_index('no3')+2
-c         if(myid.eq.0)print*,'no3 ',ivar
          Tc(lw,ivar)=bio_out(lw,ino3)
          ivar = fabm_var_index('pho')+2
-c         if(myid.eq.0)print*,'pho ',ivar
          Tc(lw,ivar)=bio_out(lw,ipo4)
          ivar = fabm_var_index('sil')+2
-c         if(myid.eq.0)print*,'sil ',ivar
          Tc(lw,ivar)=bio_out(lw,isio)
          ivar = fabm_var_index('oxy')+2
-c         if(myid.eq.0)print*,'oxy ',ivar
          Tc(lw,ivar)=bio_out(lw,io2)
          ivar = fabm_var_index('opa')+2
-c         if(myid.eq.0)print*,'opa ',ivar
          Tc(lw,ivar)=bio_out(lw,iop)
 !         ivar = fabm_var_index('bg')
 !         Tc(lw,ivar)=bio_out(lw,15)
@@ -1843,15 +1831,15 @@ c         if(myid.eq.0)print*,'opa ',ivar
 !      
 !c---das ist komisch         do ibio=1,nbio
 !        
-       do lw=1,ndrei
-c       do ibio=1,npel
-         do ibio=3,nbio
-        Tc(lw,ibio)=bio_out(lw,ibio)
-        enddo
-        do ii=1,nsed
-        Tsed(lw,ii)=bio_out(lw,nbio+ii)
-        enddo
-       enddo
+c       do lw=1,ndrei
+cc       do ibio=1,npel
+c         do ibio=3,nbio
+c        Tc(lw,ibio)=bio_out(lw,ibio)
+c        enddo
+c        do ii=1,nsed
+c        Tsed(lw,ii)=bio_out(lw,nbio+ii)
+c        enddo
+c      enddo
 !c       inbio=size(Tc,2)
 !c       call change_units(Tc,1,inbio)
 !
@@ -2151,8 +2139,25 @@ c-----------------------------------------------------------------------
 #endif
 #ifdef _FABM_  
        if(apply_fabm)then
+         ! Initialze FABM's pelagic and sediment variables
+         do l=1,nbio
+#ifdef MPI
+            call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#else
+            call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#endif
+         end do
+
+         do l=1,nsed
+#ifdef MPI
+            call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#else
+            call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#endif
+         end do
+
        call initialize_fabm(myid,deltat,lazc,iwet,indend,icord,
-     &                      pd2(:,:,1:ilo),Tc,Tsed,einstr,taubot_2d)
+     &                      pd2(:,:,1:ilo),einstr,taubot_2d)
        endif !apply_fabm
 #endif
 
@@ -3758,22 +3763,56 @@ cUD    calculate bottom shear stress
       enddo
       enddo
 
-!KB      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed,dTc,dTsed)
-      call update_fabm(myid,imal,iwet,indend,ltief,pd2(:,:,1:ilo),
-     &                 Tc,Tsed,dTc,dTsed)
+      ! Here Ute must check
+      ! Copy Tc and Tsed to FABM's pelagic and sediment variables
+      do l=1,nbio
+#ifdef MPI
+         call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#else
+         call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#endif
+      end do
+      do l=1,nsed
+#ifdef MPI
+         call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#else
+         call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#endif
+      end do
 
-!               do ibio=3,nbio
-!        if(myid.eq.0)print*,'after update fabm Tc',ibio,
-!     &maxval(Tc(:,ibio))
+      call update_fabm(myid,imal,ltief,pd2(:,:,1:ilo))
+
+      ! Copy FABM's pelagic and sediment source-sink terms to dTc and dTsed
+      do l=3,nbio
+#ifdef MPI
+         call comp3d1d_s(interior_sms(:,:,:,l-2),dTc(:,l))
+#else
+         call comp3d1d(interior_sms(:,:,:,l-2),dTc(:,l))
+#endif
+      end do
+      do l=1,nsed
+#ifdef MPI
+         call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+#else
+         call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+#endif
+      end do
+      
+      ! Apply time integration
+
+c               do ibio=3,nbio
+c        if(myid.eq.0)print*,'after update_fabm Tc',3,
+c     &maxval(Tc(:,3)),minval(Tc(:,3))
 !     &,maxval(dTc(:,ibio)),minval(dTc(:,ibio))
 !              enddo
-!               do ibio=3,nsed
-!        if(myid.eq.0)print*,'after update fabm Tsed',ibio,
-!     &maxval(Tsed(:,ibio))
-!     &,maxval(dTsed(:,ibio)),minval(dTsed(:,ibio))
-!              enddo
+               do ibio=3,nsed
+        if(myid.eq.0)print*,'after update fabm Tsed',ibio,nsed,
+     &shape(dTsed),
+     &maxval(Tsed(:,ibio))
+     &,maxval(dTsed(:,ibio)),minval(dTsed(:,ibio))
+              enddo
 ! apply the returned increments
-        iupdate_fabm_log=0
+        iupdate_fabm_log=1
        if(iupdate_fabm_log.eq.1)then !ute
 #ifndef MPI
       do nwet=1,ndrei
@@ -3793,7 +3832,10 @@ cUD    calculate bottom shear stress
             nwet2=indwet(lwe)+lazc(lwe)
             do k=nwet1,nwet2
                do ibio=3,nbio
-                  Tc(k,ibio)=Tc(k,ibio)+dTc(k,ibio)*deltat
+
+                  Tc(k,ibio)=max(0.00001,Tc(k,ibio)+dTc(k,ibio)*deltat)
+c                 if(Tc(k,ibio).lt.0.) print*,' updateTc',myid,k,
+c     &ibio,Tc(k,ibio),dTc(k,ibio)
                enddo
                do ised=1,nsed
                   Tsed(k,ised)=Tsed(k,ised)+dTsed(k,ised)*deltat
@@ -3803,9 +3845,10 @@ cUD    calculate bottom shear stress
       enddo
 #endif
       endif !ute test boundary
-!               do ibio=3,nbio
-!        if(myid.eq.0)print*,'after update Tc',ibio,maxval(Tc(:,ibio))
-!              enddo
+c               do ibio=3,nbio
+c        if(myid.eq.0)print*,'after updateTc',
+c     &ibio,maxval(Tc(:,ibio)),maxval(dTc(:,ibio)),deltat
+c              enddo
 #endif
 
 
@@ -4318,7 +4361,7 @@ cc     set necessary equal boundary lines for biomass and nutrients
         ibio=0
         if(ivar.eq.fabm_var_index('no3')+2)then
         ibio=ino3
-        print*,'test bio_bd 2',ivar,ibio,bio_rum(1:10,ibio)
+c        print*,'test bio_bd 2',ivar,ibio,bio_rum(1:10,ibio)
         elseif(ivar.eq.fabm_var_index('pho')+2)then
         ibio=ipo4
         elseif(ivar.eq.fabm_var_index('sil')+2)then
