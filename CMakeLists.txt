@@ -31,8 +31,6 @@ add_definitions(-DSASCII)
 #add_definitions(-DCARA)
 #add_definitions(-DNOFISH)  i don't think those are needed in the Fabm-ecosmo version  UD
 add_definitions(-DMPIP)
-add_compile_options(-pg -g -fpe0 -traceback -check all -debug extended)
-#add_compile_options(-pg -g -fbacktrace -fcheck=all -ffpe-trap=zero,overflow,underflow)
 
 set(FABM_FORCED_REAL_KIND "selected_real_kind(6)")
 option(HAMSOM_USE_FABM "Include support for Framework for Aquatic Biogeochemical Models (fabm.net)" OFF)
