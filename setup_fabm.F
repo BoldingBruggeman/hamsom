@@ -734,7 +734,220 @@ c		pause
 5      return 
        end 
 
+#ifdef _FABM_
 
+*��5 read_bio_bconditions
+c-----------------------------------------------------------------------
+      subroutine read_bio_bconditions (nfile,nfile2,nday,ijulu,month)
+c-----------------------------------------------------------------------
+c     boundary values for bio-variables 
+c-----------------------------------------------------------------------
+      include 'C_model.f'
+      include 'C_nbio_fabm.f'
+      include 'C_mpi.f'
+      parameter(khor1=khor+1)
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor), 
+     *  indend(n),isornr(n),isorsr(n),islab(n) 
+      
+      common /biobd/ bio_rum(lvrp,nbio)
+c      common /tscdb/ sarum(lvrp),tarum(lvrp),bio_rum(lvrp,nbio)
+c	common /tsc/ sarum_old(lvrp),tarum_old(lvrp)
+      common /urand/       zday(lrp),zvar(lrp),zalt(lrp)
+      common /uranddb/ zday_old(lrp),zvar_old(lrp)
+      common /liq_b/lq_b(iranz,5),lq_b2D(iranz*m),lq_b3D(iranz*m*ilo),
+     &  num_b(7),nul_p(6)
+      dimension pl(lrp,2),ps(lrp,2)
+
+
+      if(nday.eq.1)then
+      read(nfile,*,err=124) nwmonht
+      do l=1,lvrp
+      read(nfile,'( 11(1x, e12.6) )',err=124) (bio_rum(l,i),i=3,13)
+       bio_rum(l,14)=bio_rum(l,12)/20.  !...opal....
+      enddo
+      IF(myid .eq. 0)
+     &print*,' boundary values bio_bd  were read, month=',nwmonht
+      call change_units_bd(bio_rum,1)
+
+      goto 1
+      
+
+ 124  write(*,*)'error in reading boundary values bio_bd, month=',
+     & nwmonht
+      pause
+      endif
+
+1     continue
+      goto 2
+      if(mod(ijulu-1,5).eq.0.and.ijulu.ne.366)then
+	write(*,*)'read bio boundary day,ijulu ',nday,ijulu
+      do i=10,lrp
+      read(nfile2,'(5(1x,f10.4))')ff,pl(i,1),pl(i,2),ps(i,1),ps(i,2)
+      enddo      
+	 
+      nwet=0
+
+	do lww=1,lrp
+      lump = lazc(lq_b2D(lww))
+      do k=1,lump
+      nwet=nwet+1
+	if(lww.ge.10)then
+	if(k.le.5)then
+	bio_rum(nwet,3)=ps(lww,1)
+	bio_rum(nwet,4)=pl(lww,1)
+	else
+	bio_rum(nwet,3)=ps(lww,2)
+	bio_rum(nwet,4)=pl(lww,2)
+      endif
+	if(k.gt.12)then
+	bio_rum(nwet,3)=0.0001
+	bio_rum(nwet,4)=0.0001
+      endif
+      endif
+      enddo
+	enddo	
+	if(month.eq.1.or.month.eq.12)then
+	do nwet=1,lvrp
+      bio_rum(nwet,3)=min(bio_rum(nwet,3),1.6)
+      bio_rum(nwet,4)=min(bio_rum(nwet,4),1.6)
+      enddo
+	endif
+	write(*,*)'read bio boundary were read'
+      endif
+      
+2     continue	
+c	do nwet=1,lvrp
+c	write(*,*)'nio_bc 10', bio_rum(nwet,10),nwet
+cc	pause
+c       enddo
+      return
+      end
+
+cUD-------------------------------------------------
+      subroutine change_units_bd(f,n_choice)
+      include 'C_model.f'
+      include 'C_nbio_fabm.f'
+       parameter (ips=3,ipl=4,ibg=15,izs=5,izl=6,idet=7,inh4=8,
+     &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
+     &ised1=1,ised2=2,ised3=3,imb1=4)
+       real REDF(10)
+      data
+     &      REDF(1)/6.625/,  !C_N    PrmREDF(1) mol_C/mol_N=    6.625
+     &      REDF(2)/106.0/,  !C_P    PrmREDF(2) mol_C/mol_P=  106.000
+     &      REDF(3)/6.625/,  !C_SiO  PrmREDF(3) mol_C/mol_Si=    6.625
+     &      REDF(4)/16.0/,  !N_P    PrmREDF(4) mol_N/mol_P=   16.000
+     &      REDF(5)/1.0/,   !N_SiO  PrmREDF(5) mol_N/mol_Si=    1.000
+     &      REDF(6)/12.010/,   !C_Cmg  PrmREDF(6) mg_C/mmol_C=   12.010
+     &      REDF(7)/44.6608009/,   !mm_ml  PrmREDF(7)(mmolO2/m**3)/(mlO2/l)   = 44.6608009
+     &      REDF(8)/14.007/,   !  mmolN/mgN   
+     &      REDF(9)/30.97/,   ! mmolP/mgP
+     &      REDF(10)/28.09/   ! mmolSi/mgSii
+      dimension f(lvrp,nbio)
+
+      if(n_choice.eq.1)then
+
+*------change units
+         do l=1,lvrp
+
+c         do ibio=3,7  !Ps, Pl, Zs, Zl, De
+
+c         f(l,ibio)=f(l,ibio)        !*REDF(6)  !input in   mgC /m**3 to [mmolC/m**3]
+
+c         enddo
+
+        do ibio=8,10 ! NH4, NO2, NO3
+         f(l,ibio)=f(l,ibio)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
+         enddo
+         f(l,ipo4)  =f(l,ipo4)  *REDF(2)*REDF(6)  !input in mmolP /m**3 to [mmolC/m**3]
+         f(l,isio)  =f(l,isio)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+         f(l,iop)  =f(l,iop)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+         f(l,io2)  =f(l,io2)  *REDF(7)          !input in mmolO2/m**3 to milliliters O2/liter 
+         enddo !l=1,nrei
+
+      else
+*------change units
+      endif
+      return
+      end
+cuD---------------------------------------------------------------------------------------
+
+
+*��8 bioneu
+c-----------------------------------------------------------------------
+c      subroutine bioneu (iindex,izet,time,ivar,ibio)
+      subroutine bioneu (iindex,izet,time,irum)
+c-----------------------------------------------------------------------
+      include 'C_model.f'
+      include 'C_nbio_fabm.f'
+      include 'C_mpi.f'
+c        include 'C_rbio.f'
+		  parameter(ilop1=ilo+1) 
+		  parameter(khor1=khor+1) 
+
+        dimension f(m,n,ilo)
+        dimension iindex(m,n),izet(m,n)
+      common /gitter/ dt,r,g,dl,dlr,dlrh,dln(m),rdln(m),rad,dth,
+     *  dlvo(m),dlvu(m),gh,rdt,dt2,r4,coru(m),corv(m),dtrdln(m),dtdlr
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),indend(n),
+     *             isornr(n),isorsr(n),islab(n)
+      common /liq_b/lq_b(iranz,5),lq_b2D(iranz*m),lq_b3D(iranz*m*ilo),
+     &  num_b(7),nul_p(6)
+      common /T_4d/ Tc(ndrei,nbio),dTc(ndrei,nbio),
+     &Tc_mit(ndrei,nbio+nsed)
+c      common /tscdb/ sarum(lvrp),tarum(lvrp),bio_rum(lvrp,nbio)
+      common /biobd/ bio_rum(lvrp,nbio)
+      integer ivar,ibio,irum(nbio)
+
+**** conditions for NO2, NO3, P, Si, O2 from WAO 01**********
+c      if(ibio>0)then
+       do ivar=3,nbio
+       if(irum(ivar).eq.1)then
+       do l=1,lvrp
+       Tc (lq_b3D(l),ivar)=bio_rum(l,ivar)
+       enddo
+       endif
+! Zs,Zl,D,NH4 are not set, no external condition used
+
+
+c     Westrand
+      do i=156,164
+        l   = iindex(i,16)
+        ll  = iindex(i,17)
+        lll = iindex(i,18)
+c        if(ibio.ge.10)lll = iindex(i,17)
+c        if(ibio.eq.13)lll = iindex(i,18)
+        if(irum(ivar).eq.1)lll = iindex(i,17)
+
+        lw  = izet(i,16)
+                   lump=0
+        if(lw.gt.0)lump = lazc(lw)
+        do k=1,lump
+          Tc(l +k,ivar)  = Tc(lll+k,ivar)
+          Tc(ll+k,ivar)  = Tc(lll+k,ivar)
+        enddo
+      enddo
+
+
+c     Nordrand 
+      do j=12,57
+	  l   = iindex(66,j)
+        ll  = iindex(67,j)
+        lll = iindex(68,j)
+c        if(ibio.ge.10)lll = iindex(67,j)
+c        if(ibio.eq.13)lll = iindex(68,j)
+        if(irum(ivar).eq.1)lll = iindex(67,j)
+        lw  = izet(66,j)
+	             lump=0
+        if(lw.gt.0)lump = lazc(lw)
+        do k=1,lump
+          Tc(l +k,ivar)  = Tc(lll+k,ivar)
+          Tc(ll+k,ivar)  = Tc(lll+k,ivar)
+       enddo
+      enddo
+       enddo
+
+       end 
+#endif
 
 *��9 uvrand
 c-----------------------------------------------------------------------
@@ -902,17 +1115,7 @@ c
           enddo
 
 
-      goto 5 
-      open(43,file='test_meteo')
-      do i=1,m
-      if(mod(i-1,10).eq.0)write(43,'(i3, 8(1x,i7),a1,6(1x,i7) ))')
-     &	      i,( (j), j=1,8),'-',( (j), j=n-5,n)
-      write(43,' (i3, 8(1x,f7.2),a1,6(1x,f7.2) ))')
-     &	      i,( f(i,j), j=1,8),'-',(f(i,j), j=n-5,n)
-      enddo
-      close(43)
-
-5       return
+       return
        end
 
 

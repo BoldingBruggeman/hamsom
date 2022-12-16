@@ -19,7 +19,9 @@ c----------------------------------------------------------------------
       use ncio
 #endif
 #ifdef _FABM_
-      use hamsom_fabm
+      use hamsom_fabm, only: configure_fabm, initialize_fabm
+      use hamsom_fabm, only: update_fabm, clean_fabm
+      use hamsom_fabm, only: fabm_var_index
       include 'C_nbio_fabm.f'
 #else
       include 'C_nbio.f'
@@ -99,7 +101,8 @@ c--------------------------------------------------------------------------
 
       integer iindex(m,n),iizet(m,n),jjc(m,n),jjjc(m,n,ilo)
       integer id3sur(khor)
-      integer indm(nanz),indn(nanz),rivnum(nanz) !,nfuriv(nbio)
+      integer indm(nanz),indn(nanz),rivnum(nanz)
+      
       real rivlon(nanz),rivlat(nanz),rivinp(nanz)
       
       integer nord,sued,ost,west
@@ -228,8 +231,6 @@ c-------------------------------------------------------------------------------
 c------Ute test
       real  n2init(m,n,ilo),delsal(6)
       integer spinup,noyears
-c      character*11 filewNH4,filewNO3  !for wet deposition scenarios
-c      dimension wetNH4(m,n),wetNO3(m,n)
 c      dimension wetNH41d(khor),wetNO31d(khor),dumm1d(khor)
 #ifdef WADDEN
        real bound_wadden(43,2)
@@ -307,15 +308,12 @@ c		T_4d:variables NPZD module+ temperature and salinity
 c		bio_riv: nutrient loads from rivers
 c------------------------------------------------------------------------------
 
-      common /T_4d/ Tc(ndrei,nbio),dTc(ndrei,nbio) !Tc_mit(ndrei,nbio+nsed)
+      common /T_4d/ Tc(ndrei,nbio),dTc(ndrei,nbio),
+     &Tc_mit(ndrei,nbio+nsed)
       common /ben_4d/ Tsed(ndrei,nsed),dTsed(ndrei,nsed)
-c      common /bio_riv/riv_bio(nbio,nanz),
-c     &		     zriv_bio(nbio,m,n)
+      common /bio_riv/riv_bio(nbio,nanz),
+     &		     zriv_bio(nbio,m,n)
 
-c--- help arrays for bio I/O
-cc      common /bio_out/bio_out(ndrei,npel+nben)  !npel
-      common /bio_out/bio_out(ndrei,nbio+nsed)  !npel
-      dimension bio_out1(ndrei,3:18)
 
       double precision zinc(m,n),zinc1(m,n)
       double precision wsur(khor)
@@ -373,7 +371,7 @@ c------------------------------------------------------------------------------
 c      character*16 rivinp_bio
 
       character*12 klimtex1,klimtex2,sal_aa
-      character*10 T_S_bd !bio_bd
+      character*10 T_S_bd,bio_bd
       character*10 z_d,z_v
 
       character text1*9,text2*45,text3*22,jtext*2,ltext*3
@@ -395,10 +393,42 @@ c      character*16 rivinp_bio
 #endif
 
 #ifdef _FABM_
+c--- help arrays for bio I/O
+cc      common /bio_out/bio_out(ndrei,npel+nben)  !npel
+      dimension bio_out1(ndrei,3:18),REDF(10)
+cc old parameter allocation, just used to allocate river nutrient data      
+       parameter (ips=3,ipl=4,ibg=15,izs=5,izl=6,idet=7,inh4=8,
+     &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
+     &ised1=1,ised2=2,ised3=3,imb1=4)
+      data
+     &      REDF(1)/6.625/,  !C_N    PrmREDF(1) mol_C/mol_N=    6.625
+     &      REDF(2)/106.0/,  !C_P    PrmREDF(2) mol_C/mol_P=  106.000
+     &      REDF(3)/6.625/,  !C_SiO  PrmREDF(3) mol_C/mol_Si=    6.625
+     &      REDF(4)/16.0/,  !N_P    PrmREDF(4) mol_N/mol_P=   16.000
+     &      REDF(5)/1.0/,   !N_SiO  PrmREDF(5) mol_N/mol_Si=    1.000
+     &      REDF(6)/12.010/,   !C_Cmg  PrmREDF(6) mg_C/mmol_C=   12.010
+     &      REDF(7)/44.6608009/,   !mm_ml  PrmREDF(7)(mmolO2/m**3)/(mlO2/l)   = 44.6608009
+     &      REDF(8)/14.007/,   !  mmolN/mgN   
+     &      REDF(9)/30.97/,   ! mmolP/mgP
+     &      REDF(10)/28.09/   ! mmolSi/mgSii
+      common /bio_out/bio_out(ndrei,3:nbio+nsed) 
+      dimension bio_rum1(lvrp,nbio)
+      character*11 filewNH4,filewNO3  !for wet deposition scenarios
+      dimension wetNH4(m,n),wetNO3(m,n)
+      integer irum(nbio) !UD help arrays for bounbary conditions
+      common /biobd/ bio_rum(lvrp,nbio)
+      character*2 ncoutname !UD test Tc
 cUD bottom shear stress
       dimension taubot(khor),taubot_2d(m,n)
+      logical apply_fabm, init_bio
+      integer nfuriv(nbio)
       integer ivar
       call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed)
+      apply_fabm=.true.
+      init_bio=.true.
+      bio_rum(:,:)=0.
+      filewNH4	= 'WD_NH4_2000'	 ! 10		  36
+      filewNO3	= 'WD_NO3_2000'	 ! 11
 #endif
 
 #ifdef MPI
@@ -442,7 +472,7 @@ c      ppp:    characteristic character for the run (input/output names)
 c      avmax:	   max. vertical exchange coefficient
 c      read_pah:   max. horizontal exchange coefficient
 c-----------------------------i------------------------------------------
-       ppp='tt1'
+       ppp='tx9'
 cKB       ppp='ttt'
 c       open(42,file='input_'//ppp)
 cc	open(42,file='input_t03')
@@ -554,7 +584,7 @@ c-------------------------------------------------------------------------
       T_S_bd	= 't_s_YYYYMM'	!  nfutsb   = 65
 c----Ute Daewel 26.4.2010
       sal_aa	= 'sal_aayy.dat'!  anual anomaly for boundary salinty from ICES data
-c      bio_bd	= 'bio_1984MM'	!  nfutsb   = 65
+      bio_bd	= 'bio_1984MM'	!  nfutsb   = 65
       z_d	= 'z_d_YYYYMM'	!  nzactp   = 18
       z_v	= 'z_v_YYYYMM'	!  nzac	    = 19
 
@@ -692,9 +722,9 @@ c      min_time_step=60*30	!30m
 c      min_time_step=60*20      !20m
       min_time_step=60*10      !cd1 1990 onwards
 c      min_time_step=60*5      !10m fur b20
-      if(ijahr.eq.2010.and.lmon.eq.2)then 
-      min_time_step=60*5      !10m fur b20
-      endif
+c      if(ijahr.eq.2010.and.lmon.eq.2)then 
+c      min_time_step=60*5      !10m fur b20
+c      endif
       deltat = real(min_time_step)
         tout=24*60*60          !output alle 60 min
 
@@ -1024,7 +1054,16 @@ c-------------------------------------------------------------------------------
 c   zero-initialisation of biological variables
 c-------------------------------------------------------------------------------
 
-	 call Rzero(Tc  ,ndrei*nbio)      !Biologycal 3D fields
+	call Rzero(Tc  ,ndrei*nbio)      !Biologycal 3D fields
+#ifdef _FABM_
+        if(apply_fabm)then 
+        call Rzero(Tc_mit,ndrei*(nbio+nsed))      !Biologycal 3D fields daily averaged
+c        call Rzero(flu ,ndrei*nflu)      !Biologycal reactionsflu(ndrei,nflu)i
+        call Rzero(bio_out,ndrei*((nbio+nsed)-2))   !Light, nutrient onas,productioni
+        call Rzero(riv_bio,nbio*nanz)
+        call Rzero(zriv_bio,nbio*m*n)
+        endif !apply_fabm
+#endif
 
 c-----------------------------------------------------------------------
 c      begin change time dependent file names
@@ -1149,6 +1188,7 @@ c-----------------------------------------------------------------------
       open(unit=nfusa,file= pathpc//pathzeb//sal_aa)  !salinity anomality Ute Daewel
 
 
+
 c-----------------------------------------------------------------------
       IF(myid .EQ. 0)THEN
       print*,'	read salinityanomality		 file : ',sal_aa
@@ -1240,6 +1280,38 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------
       enddo
       close(nfuriv_points)
+#ifdef _FABM_
+       if(apply_fabm)then 
+       nfuriv(1:nbio)=0
+       do inu=1,nbio
+       write(rivinput(10:12),'(i3.3)') inu
+       nfu=170+inu 
+       open(unit=nfu,file=pathpc//pathriv//rivinput,
+     &form='formatted',status='old',iostat=ios)
+      if(myid.eq.0)print*,'ios ',ios  
+      if(ios.eq.0)then
+        nfuriv(inu)=nfu
+       else
+        nfuriv(inu)=0
+       endif
+c     
+       if(myid .EQ. 0.and.ios.eq.0)then
+       write(*,*)'open rivinpYY_bio.dat',  pathpc//pathriv//rivinput
+       endif
+       enddo
+c--------------------------------------------------------------------------
+c	open files for wetdeposition
+c---------------------------------------------------------------------------
+       nfuwd1 = 20
+       open(unit=nfuwd1,file= pathpc//'wet_dep/'//filewNH4,
+     &form='formatted')
+       nfuwd2 = 21
+       open(unit=nfuwd2,file= pathpc//'wet_dep/'//filewNO3,
+     &form='formatted')
+c-------------------------------------------------------------
+       endif !apply_fabm
+#endif
+  
        endif   !	 IF(river_on) then
  
 
@@ -1605,7 +1677,9 @@ c-----------------------------------------------------------------------------
       read (nfuset,2004,err=9876,end=9874) frice,his,hisr,tis
       read (nfuset,2004,err=9876,end=9874) ui,vi
       close(unit=nfuset)
+      
 #ifdef _FABM_
+       if(apply_fabm)then 
         if(ijahr_start.eq.1990)then
 c      if(ijahr_start.eq.1979)then
 #ifdef SATLAS
@@ -1613,9 +1687,11 @@ c      if(ijahr_start.eq.1979)then
 #else
 c       startfile(1:3)=ppp
         startfile(1:3)='cd3'
+        init_bio=.true.
 #endif
         else
         startfile(1:3)=ppp
+        init_bio=.false.
         endif
 c-----------------------------------------------------------------
 c     read biomass start files, binary
@@ -1647,7 +1723,7 @@ c--------------------------------------------------------------------------
       nfuset=12
       open(nfuset,file= pathpc//'north_b/input_1989/b_i891231')
 c--Ute-Daewel-----nbio-5 wegen bg=15,sed1=16,sed2=17,sed3=18
-          do ibio=3,nbio-5
+          do ibio=3,13 !nbio-5
 c        do ibio=1,11  !npel
         read (nfuset,2006,err=9876,end=9874) (bio_out (l,ibio),l=1,ntot)
         IF(myid .EQ. 0) print*,'bio_out=',ibio,'read'
@@ -1678,8 +1754,8 @@ c        do ibio=1,2  !number changed back to when bio includes 1,2 T&S Ute 26.5
 
 c-ute-initial bedingungen Bluegreens keine AHnung soweit im atlas checken
        do lw=1,ndrei
-       bio_out(lw,14)=0.   !opal
-       bio_out(lw,15)=0.1  !cyanos
+       bio_out(lw,iop)=0.   !opal
+       bio_out(lw,ibg)=0.1  !cyanos
 c------set initial values for new variables here------
        enddo
 c---ute daewel 5/1/2010 initial conditions for sediment taken from 1980
@@ -1711,39 +1787,40 @@ c---------------------------------------------------
 c--------------------------------------------------------------------------
 c      set Tc & Tsed and change units
 c--------------------------------------------------------------------------
-c       write(*,*) nbio,npel,nben
+        write(*,*) nbio !,npel,nben
 ccc-ute 160620-----change_units added to subs.F
-       inbio=size(bio_out,2)
 6576   continue
+!!!! use the same executable with and without fabm !!!
+        if(init_bio)then
+       inbio=size(bio_out,2)+2
        call change_units(bio_out,1,inbio)
-#ifdef _FABM_
        do lw=1,ndrei
          ivar = fabm_var_index('fla')+2
-         Tc(lw,ivar)=bio_out(lw,3)
+         Tc(lw,ivar)=bio_out(lw,ips)
          ivar = fabm_var_index('dia')+2
-         Tc(lw,ivar)=bio_out(lw,4)
+         Tc(lw,ivar)=bio_out(lw,ipl)
          ivar = fabm_var_index('microzoo')+2
-         Tc(lw,ivar)=bio_out(lw,5)
+         Tc(lw,ivar)=bio_out(lw,izs)
          ivar = fabm_var_index('mesozoo')+2
-         Tc(lw,ivar)=bio_out(lw,6)
+         Tc(lw,ivar)=bio_out(lw,izl)
          ivar = fabm_var_index('det')+2
-         Tc(lw,ivar)=bio_out(lw,7)
+         Tc(lw,ivar)=bio_out(lw,idet)
          ivar = fabm_var_index('nh4')+2
-         Tc(lw,ivar)=bio_out(lw,8)
+         Tc(lw,ivar)=bio_out(lw,inh4)
          ivar = fabm_var_index('dom')+2
-         Tc(lw,ivar)=bio_out(lw,9)
+         Tc(lw,ivar)=bio_out(lw,idom)
          ivar = fabm_var_index('no3')+2
-         Tc(lw,ivar)=bio_out(lw,10)
+         Tc(lw,ivar)=bio_out(lw,ino3)
          ivar = fabm_var_index('pho')+2
-         Tc(lw,ivar)=bio_out(lw,11)
+         Tc(lw,ivar)=bio_out(lw,ipo4)
          ivar = fabm_var_index('sil')+2
-         Tc(lw,ivar)=bio_out(lw,12)
+         Tc(lw,ivar)=bio_out(lw,isio)
          ivar = fabm_var_index('oxy')+2
-         Tc(lw,ivar)=bio_out(lw,13)
+         Tc(lw,ivar)=bio_out(lw,io2)
          ivar = fabm_var_index('opa')+2
-         Tc(lw,ivar)=bio_out(lw,14)
-!         ivar = fabm_var_index('bg')
-!         Tc(lw,ivar)=bio_out(lw,15)
+         Tc(lw,ivar)=bio_out(lw,iop)
+         ivar = fabm_var_index('bg')+2
+         Tc(lw,ivar)=0.01 !bio_out(lw,ibg)
 
          ivar = fabm_var_index('sed1')  
          Tsed(lw,ivar)=bio_out(lw,nbio+1)
@@ -1752,31 +1829,32 @@ ccc-ute 160620-----change_units added to subs.F
          ivar = fabm_var_index('sed3')  
          Tsed(lw,ivar)=bio_out(lw,nbio+3)
         enddo
-#else
-      
-c---das ist komisch         do ibio=1,nbio
-        
-       do lw=1,ndrei
-c       do ibio=1,npel
-         do ibio=3,nbio
-        Tc(lw,ibio)=bio_out(lw,ibio)
-        enddo
-        do ii=1,nsed
-        Tsed(lw,ii)=bio_out(lw,nbio+ii)
-        enddo
-       enddo
-c       inbio=size(Tc,2)
-c       call change_units(Tc,1,inbio)
-
-c        do ibio=3,nbio
-c        do   lw=1,ndrei
+        call Rzero(bio_out,ndrei*(nbio+nsed))
+       else
+!      
+!c---das ist komisch         do ibio=1,nbio
+!        
+c       do lw=1,ndrei
+cc       do ibio=1,npel
+c         do ibio=3,nbio
 c        Tc(lw,ibio)=bio_out(lw,ibio)
 c        enddo
+c        do ii=1,nsed
+c        Tsed(lw,ii)=bio_out(lw,nbio+ii)
 c        enddo
-c      call Rzero(bio_out,ndrei*(npel+nben))
-      call Rzero(bio_out,ndrei*(nbio+nsed))
-
-#endif 
+c      enddo
+!c       inbio=size(Tc,2)
+!c       call change_units(Tc,1,inbio)
+!
+!c        do ibio=3,nbio
+!c        do   lw=1,ndrei
+!c        Tc(lw,ibio)=bio_out(lw,ibio)
+!c        enddo
+!c        enddo
+!c      call Rzero(bio_out,ndrei*(npel+nben))
+        call Rzero(bio_out,ndrei*(nbio+nsed))
+        endif  !init_bio
+        endif !apply_fabm
 #endif
 
  2003	format(4i5)
@@ -2046,25 +2124,52 @@ c-----------------------------------------------------------------------
         write(*,*) 'fresh runoff skipped YY MM',ijahr,i
         endif
         enddo
-	endif !	       if(river_on)then
+#ifdef _FABM_
+       if(apply_fabm)then 
 
+c-----------------------------------------------------------------------
+      IF(myid .EQ. 0)THEN
+      print*,'skip riv_bio load if start month ne 1, file: ',rivinp_bio
+      endif
+c-----------------------------------------------------------------------
+
+        do i=1,mona-1
+        itagend = itagan(i)
+        do ii=1,itagend
+        do ibio=1,nbio
+        if(nfuriv(ibio).ne.0)then
+        call read_riv_input(nfuriv(ibio),rivinp,nanz)
+        endif
+        enddo
+        enddo
+        enddo
+        open(44,file= pathpc//'h_input/bio_boundary/pl&ps')
+        endif ! if(apply_fabm))
+#endif
+        endif !	       if(river_on)then
+!--------------------------------------------------------
       write(outfile(4:5),'(i2.2)') mjar
 
 #ifndef MPI
-	  outfile(1:3)=ppp
-	  open(121,
-     &	  file=pathpc2//pathout//'Qh_'//outfile(1:5),form='unformatted')
+        outfile(1:3)=ppp
+        open(121,
+     &   file=pathpc2//pathout//'Qh_'//outfile(1:5),form='unformatted')
 #else
-	  outfile(1:3)=ppp
-	  write(outfile(4:5),'(i2.2)') mjar
-	  if(myid .eq. nprocs-1) open(121,
-     &	  file=pathpc2//pathout//'Qh_'//outfile(1:5),form='unformatted')
-	  outfile1(1:3)=ppp
-	  write(outfile1(4:5),'(i2.2)') mjar
+        outfile(1:3)=ppp
+        write(outfile(4:5),'(i2.2)') mjar
+        if(myid .eq. nprocs-1) open(121,
+     &   file=pathpc2//pathout//'Qh_'//outfile(1:5),form='unformatted')
+         outfile1(1:3)=ppp
+         write(outfile1(4:5),'(i2.2)') mjar
 #endif
 #ifdef _FABM_  
-       call initialize_fabm(myid,deltat,lazc,iwet,indend,icord,
-     &                      pd2(:,:,1:ilo),Tc,Tsed,einstr,taubot_2d)
+      if(apply_fabm)then
+
+      call initialize_fabm(myid,deltat,iwet,indend,lazc,
+     &                     lb0,le0,indwet,
+     &                     icord,
+     &                     pd2(:,:,1:ilo),Tc,Tsed,einstr,taubot_2d)
+      endif
 #endif
 
 c***********************************************************************
@@ -2077,9 +2182,9 @@ c  begin monthly loop
 c***********************************************************************
 
 
-cKB      do 2111 lmon=mona,mone
+      do 2111 lmon=mona,mone
 cKB      do 2111 lmon=1,12
-      do 2111 lmon=1,1
+c      do 2111 lmon=1,1
       igstep1 = 0
       it_init = 0
       monat = lmon
@@ -2104,10 +2209,12 @@ c-----------------------------------------------------------------------
 	  print*,'output pyhsics monthly file open: ',outfile(1:7)
 
 #ifdef _FABM_
+          if (apply_fabm) then 
           outfile(8:8)='b'
           open(unit=nout_b,
      &    file=pathpc2//pathout//outfile,form='unformatted')
           print*,'output biomass monthly file open: ',outfile
+          endif !apply_fabm
 #endif
 
 #else
@@ -2130,6 +2237,7 @@ c-----------------------------------------------------------------------
      &	  file=pathpc2//pathout//outfile(1:8),form='unformatted')
 
 #ifdef _FABM_
+         if (apply_fabm) then 
           if(myid .eq. 1)then
 	  write(outfile(6:7),'(i2.2)') monat
           outfile(8:8)='b'
@@ -2142,6 +2250,7 @@ c-----------------------------------------------------------------------
           outfile(9:9)='b'
           open(unit=nout_b1,
      &    file=pathpc2//pathout//outfile(1:9),form='unformatted')
+         endif !apply_fabm
 #endif
 
 #endif
@@ -2152,7 +2261,7 @@ c-----------------------------------------------------------
       write(z_d	   (9:10),'(i2.2)') monat
       write(z_v	   (9:10),'(i2.2)') monat
       write(T_S_bd (9:10),'(i2.2)') monat
-c      write(bio_bd (9:10),'(i2.2)') monat
+      write(bio_bd (9:10),'(i2.2)') monat
 
 	nzactp =  18
       open(unit=nzactp,file=pathpc//pathzeb//z_d,form='formatted',
@@ -2181,7 +2290,11 @@ c      write(bio_bd (9:10),'(i2.2)') monat
       endif
 	nfutsb1 = 65
       open(65,	     file= pathpc//nmodel//'/input_1980/'//T_S_bd) !if clim
-
+#ifdef _FABM_
+      if (apply_fabm)then
+      open(15,file= pathpc//'h_input/bio_boundary/'//bio_bd)
+      endif !apply_fabm
+#endif
 	  IF(myid .EQ. 0)THEN
 	  write(*,*)pathpc//pathzeb//z_d
 	  write(*,*)pathpc//pathzeb//z_v
@@ -2295,9 +2408,9 @@ c     day loop (days per month)
 c-----------------------------------------------------------------------
 
       if(lmon.eq.mone)then
-	itagend = itage
+       itagend = itage
       else
-	itagend = itagan(monat)
+       itagend = itagan(monat)
       endif
 
       do 1111 nday=itaga,itagend
@@ -2314,12 +2427,108 @@ c     read river discharge daily
           call Rzero(rivinp,nanz)
           call read_riv_input(nfurin,rivinp,nanz)
           eintr=rivinp
-      if(myid.eq.0)print*,'eintr ',eintr
+c      if(myid.eq.0)print*,'eintr ',eintr
       endif         
 
-c   3. set necessary equal boundary lines for T and S
+
+c   2. set necessary equal boundary lines for T and S
       call tsrneu(iindex,izet,time,dz,delsal)  !set equal boundary lines for T,S
 
+#ifdef _FABM_
+        if(apply_fabm)then
+cc   2. for monthly biomass and nutrients
+c        bio_rum(:,:)=0.
+c        if(nday.eq.1)then
+        call read_bio_bconditions (15,44,nday,jday,monat)
+cc   4. set necessary equal boundary lines for biomass and nutrients
+cc  UD boundary conditions for biology 
+c        do ivar=3,nbio
+c        ibio=0
+c        if(ivar.eq.fabm_var_index('no3')+2)then
+c        ibio=ino3
+c        bio_rum(:,ibio)=bio_rum(:,ibio)*REDF(1)*REDF(6)
+c        elseif(ivar.eq.fabm_var_index('pho')+2)then
+c        ibio=ipo4
+c        bio_rum(:,ibio)=bio_rum(:,ibio)*REDF(2)*REDF(6)
+c        elseif(ivar.eq.fabm_var_index('sil')+2)then
+c        ibio=isio
+c        bio_rum(:,ibio)=bio_rum(:,ibio)*REDF(3)*REDF(6)
+c        elseif(ivar.eq.fabm_var_index('opa')+2)then
+c        ibio=iop
+c        bio_rum(:,ibio)=bio_rum(:,ibio)*REDF(3)*REDF(6)
+c        elseif(ivar.eq.fabm_var_index('oxy')+2)then
+c        ibio=io2
+c        bio_rum(:,ibio)=bio_rum(:,ibio)*REDF(7)
+c        endif
+         if(nday.eq.1)then
+                 irum(:)=0
+         ivar = fabm_var_index('fla')+2
+         bio_rum1(:,ivar)=bio_rum(:,ips)
+c         irum(ivar)=1
+         ivar = fabm_var_index('dia')+2
+         bio_rum1(:,ivar)=bio_rum(:,ipl)
+c         irum(ivar)=1
+         ivar = fabm_var_index('microzoo')+2
+         bio_rum1(:,ivar)=bio_rum(:,izs)
+         ivar = fabm_var_index('mesozoo')+2
+         bio_rum1(:,ivar)=bio_rum(:,izl)
+         ivar = fabm_var_index('det')+2
+         bio_rum1(:,ivar)=bio_rum(:,idet)
+         ivar = fabm_var_index('nh4')+2
+         bio_rum1(:,ivar)=bio_rum(:,inh4)
+         ivar = fabm_var_index('dom')+2
+         bio_rum1(:,ivar)=bio_rum(:,idom)
+         ivar = fabm_var_index('no3')+2
+         bio_rum1(:,ivar)=bio_rum(:,ino3)
+         irum(ivar)=1
+         ivar = fabm_var_index('pho')+2
+         bio_rum1(:,ivar)=bio_rum(:,ipo4)
+         irum(ivar)=1
+         ivar = fabm_var_index('sil')+2
+         bio_rum1(:,ivar)=bio_rum(:,isio)
+         irum(ivar)=1
+         ivar = fabm_var_index('oxy')+2
+         bio_rum1(:,ivar)=bio_rum(:,io2)
+         irum(ivar)=1
+         ivar = fabm_var_index('opa')+2
+         bio_rum1(:,ivar)=bio_rum(:,iop)
+!KB         ivar = fabm_var_index('bg')+2
+!KB         bio_rum1(:,ivar)=bio_rum(:,ibg)
+          
+         bio_rum(:,:)=0.
+c         do ivar=3,nbio
+         bio_rum(:,:)=bio_rum1(:,:)
+c         enddo
+c        call bioneu(iindex,izet,time,ivar,ibio)    !set equal boundary lines biologY CHECK KKKKKKK 
+        call bioneu(iindex,izet,time,irum)    !set equal boundary lines biologY CHECK KKKKKKK 
+         endif
+c        endif 
+cc   5. read river nutrient loads
+      if(river_on)then
+        riv_bio(1:nbio,1:nanz)=0.
+        do ibio=1,nbio
+        ivar=0 
+        if(nfuriv(ibio).ne.0)then
+        call Rzero(rivinp,nanz)
+        call read_riv_input(nfuriv(ibio),rivinp,nanz)
+          if(ibio.eq.ino3)then
+        ivar = fabm_var_index('no3')+2
+          riv_bio(ivar,1:nanz)=rivinp*REDF(1)*REDF(6)
+        elseif(ibio.eq.inh4)then
+        ivar = fabm_var_index('nh4')+2
+          riv_bio(ivar,1:nanz)=rivinp*REDF(1)*REDF(6)
+        elseif(ibio.eq.ipo4)then
+        ivar = fabm_var_index('pho')+2
+          riv_bio(ivar,1:nanz)=rivinp*REDF(2)*REDF(6)
+        elseif(ibio.eq.isio)then
+        ivar = fabm_var_index('sil')+2
+          riv_bio(ivar,1:nanz)=rivinp*REDF(3)*REDF(6)
+         endif
+        endif
+        enddo
+      endif
+      endif !(apply_fabm)
+#endif
       call estate
 c-----------------------------------------------------------------------
 c     to monitor model CPU time
@@ -2344,25 +2553,29 @@ c-----------------------------------------------------------------------
       do 1000 ip=1,iper
 
       icccount=icccount+1
-c#ifdef MPI
-c      if(progno)then
-c      call INTI_COMM_VAR
-c      do I=3,nbio-1
-c      call com_vertical(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,0,lazc)
-c      enddo
-c      I=nbio
-c      call com_vertical(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,1,lazc)
-c      do I=3,nbio-1
-c      call com_horizontal(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,0,icdepb0,
-c     * idepb0,icdept0
-c     *,idept0,ncsendb0,nsendb0,ncsendt0,nsendt0,nbhlayer0,nthlayer0)
-c      enddo
-c      I=nbio
-c      call com_horizontal(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,1,icdepb0,
-c     *idepb0,icdept0
-c     *,idept0,ncsendb0,nsendb0,ncsendt0,nsendt0,nbhlayer0,nthlayer0)
-c      endif
-c#endif
+#ifdef _FABM_
+      if (apply_fabm)then
+#ifdef MPI
+      if(progno)then
+      call INTI_COMM_VAR
+      do I=3,nbio-1
+      call com_vertical(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,0,lazc)
+      enddo
+      I=nbio
+      call com_vertical(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,1,lazc)
+      do I=3,nbio-1
+      call com_horizontal(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,0,icdepb0,
+     * idepb0,icdept0
+     *,idept0,ncsendb0,nsendb0,ncsendt0,nsendt0,nbhlayer0,nthlayer0)
+      enddo
+      I=nbio
+      call com_horizontal(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,1,icdepb0,
+     *idepb0,icdept0
+     *,idept0,ncsendb0,nsendb0,ncsendt0,nsendt0,nbhlayer0,nthlayer0)
+      endif
+#endif
+      endif !apply_fabm     
+#endif
       imal = imal+1
 
       call settime(time,ijulu,ihouu,iminu,isecu)
@@ -2371,17 +2584,45 @@ c-----------------------------------------------------------------------
 *     time output on screen
 c-----------------------------------------------------------------------
        if(myid .eq. 0) THEN
-	if(mod(ip-1,1).eq.0)
+       if(mod(ip-1,1).eq.0)
      & write(*,2829)ijahr,lmon,nday,ihouu,iminu,isecu,ijulu
        endif
  2829 format('y m d h m s jul ',i5,5i3,i4)
 
+        call Rzero2d(wetNH4,m,n)
+        call Rzero2d(wetNO3,m,n)
 
 c-----------------------------------------------------------------------^M
 c	read and process meteorological data, every 6 hours
 c-----------------------------------------------------------------------^M
-	 if  (mod(ip+ireadmet-1,ireadmet).eq.0) then
+         if  (mod(ip+ireadmet-1,ireadmet).eq.0) then
         imetind=imetind+1
+
+c-----------------------------------------------------------------------
+c	read wetdeposition data from Volker Siegel GKSS
+c-----------------------------------------------------------------------
+#ifdef _FABM_
+       if (apply_fabm)then
+        if(imetind.gt.1 .and.mod(ip+imetdep-1,imetdep).eq.0) then
+cc        if (imetind.gt.1)then
+        call readdepo(wetNH4,nfuwd1)
+        call readdepo(wetNO3,nfuwd2)
+cc
+        do ii=1,m
+          do jj=1,n
+        wetNH4(ii,jj)=10.**2.*wetNH4(ii,jj)/(18.039)	    ![kgNH4/ha]-->mmolN/m2
+cc	 wetNH41d(ii)=wetNH41d(ii)/ley(indwet(ii)) ![mmolN/m2]-->mmolN/m3 wird in strom geteilt
+        wetNH4(ii,jj)=wetNH4(ii,jj)*REDF(1)*REDF(6)	  ![mmolN/m3 --> mgC/m3
+        wetNO3(ii,jj)=10.**2.*wetNO3(ii,jj)/(62.004)	    ![kg/ha]-->mmol/m2
+cc	wetNO31d(ii)=wetNO31d(ii)/ley(indwet(ii))
+        wetNO3(ii,jj)=wetNO3(ii,jj)*REDF(1)*REDF(6)
+        enddo
+        enddo
+        endif
+       endif !apply_fabm     
+#endif
+
+c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 	if(myid .EQ. 0)
      &	print*,'  read met. data	    file : '
@@ -3118,22 +3359,26 @@ c---------------------------------------------------------------------------
 	if((lmon.eq.mona).and.(nday.lt.itanf)) goto 1000
       endif   ! metinread
 
-c#ifdef MPI
-c      if(progno)then
-c      call MPI_Waitall(nreq1,ir_r_b, status, ierr)
-c      INUM1=0
-c      INUM2=0
-c      do I=3,nbio
-c      call VER_UNPACK(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,lazc)
-c      enddo
-c      INUM3=0
-c      INUM4=0
-c      do I=3,nbio
-c      call HOR_UNPACK(Tc(:,I),ndrei,dtemp,iel,2,2,nbhlayer0,nthlayer0,
-c     &idepb0,idept0,icdepb0,icdept0,1,3,iwet)
-c      enddo
-c      endif
-c#endif
+#ifdef _FABM_
+      if (apply_fabm)then
+#ifdef MPI
+      if(progno)then
+      call MPI_Waitall(nreq1,ir_r_b, status, ierr)
+      INUM1=0
+      INUM2=0
+      do I=3,nbio
+      call VER_UNPACK(Tc(:,I),ndrei,dtemp,iel,2,2,1,3,lazc)
+      enddo
+      INUM3=0
+      INUM4=0
+      do I=3,nbio
+      call HOR_UNPACK(Tc(:,I),ndrei,dtemp,iel,2,2,nbhlayer0,nthlayer0,
+     &idepb0,idept0,icdepb0,icdept0,1,3,iwet)
+      enddo
+      endif
+#endif
+      endif  !apply_fabm
+#endif
 
 c-----------------------------------------------------------------------
 c     if temporal interpolation of wind and pressure is required in between
@@ -3309,7 +3554,19 @@ c-----------------------------------------------------------------------
      &+deltat*eintr(ii)/(dl*dln(indm(ii)))
       enddo
       IF(MYID .EQ. 0) print*,' end river on'
-
+#ifdef _FABM_    !set river nutrient values Ute Daewel 21/05/21
+       if (apply_fabm)then
+      do ibio=3,nbio
+      do ii=1,nanz
+      zriv_bio(ibio,indm(ii),indn(ii))=0.
+      enddo
+      do ii=1,nanz
+      zriv_bio(ibio,indm(ii),indn(ii))=zriv_bio(ibio,indm(ii),indn(ii))
+     &+deltat*riv_bio(ibio,ii)/(dl*dln(indm(ii)))
+      enddo
+      enddo
+      endif !apply_fabm
+#endif
       ENDIF !IF(river_on)THEN
 
 c-----------------------------------------------------------------------
@@ -3514,9 +3771,6 @@ c-----------------------------------------------------------------------
      
        call stromTVD(zinc1,
      &  vtmit,vtmic,avmax,ftac,szahl) !54 file outtest
-c       call stromTVD(zinc1,
-c     &  vtmit,vtmic,avmax,ftac,szahl,
-c     &  einstr,nday,time,54,wgesch) !54 file outtest
        call estate
 cKB      write(myid+20,*) Tc(:,1)
 cKB     write(myid+40,*) tec(:)
@@ -3548,10 +3802,29 @@ cUD    calculate bottom shear stress
       enddo
       enddo
 
-!KB      call update_fabm(myid,imal,deltat,iwet,indend,Tc,Tsed,dTc,dTsed)
-      call update_fabm(myid,imal,iwet,indend,ltief,pd2(:,:,1:ilo),
-     &                 Tc,Tsed,dTc,dTsed)
+      call update_fabm(myid,imal,iwet,indend,
+     &                 lazc(:),lb0(:),le0(:),indwet(:),
+     &                 ltief,
+     &                 pd2(:,:,1:ilo),Tc,Tsed,dTc,dTsed)
+
+!---------------------------------------------------------
+
+      ! Apply time integration
+
+c               do ibio=3,nbio
+c        if(myid.eq.0)print*,'after update_fabm Tc',3,
+c     &maxval(Tc(:,3)),minval(Tc(:,3))
+!     &,maxval(dTc(:,ibio)),minval(dTc(:,ibio))
+!              enddo
+               do ibio=3,nsed
+        if(myid.eq.0)print*,'after update fabm Tsed',ibio,nsed,
+     &shape(dTsed),
+     &maxval(Tsed(:,ibio))
+     &,maxval(dTsed(:,ibio)),minval(dTsed(:,ibio))
+              enddo
 ! apply the returned increments
+        iupdate_fabm_log=1
+       if(iupdate_fabm_log.eq.1)then !ute
 #ifndef MPI
       do nwet=1,ndrei
          do ibio=3,nbio
@@ -3570,16 +3843,53 @@ cUD    calculate bottom shear stress
             nwet2=indwet(lwe)+lazc(lwe)
             do k=nwet1,nwet2
                do ibio=3,nbio
-                  Tc(k,ibio)=Tc(k,ibio)+dTc(k,ibio)*deltat
+
+          Tc(k,ibio)=Tc(k,ibio)+dTc(k,ibio)*deltat
+          if(ibio.ne.fabm_var_index('oxy')+2)then
+             Tc(k,ibio)=max(0.000001,Tc(k,ibio))
+          endif         
                enddo
                do ised=1,nsed
                   Tsed(k,ised)=Tsed(k,ised)+dTsed(k,ised)*deltat
+                 Tsed(k,ised)=max(0.000001,Tsed(k,ised))
                enddo
             enddo
          endif
       enddo
 #endif
+      endif !ute test boundary
+c               do ibio=3,nbio
+c        if(myid.eq.0)print*,'after updateTc',
+c     &ibio,maxval(Tc(:,ibio)),maxval(dTc(:,ibio)),deltat
+c              enddo
 #endif
+
+
+
+c       if(mod(icccount,int(r1steps)).eq.0)then
+       if(icccount.eq.-1)then
+
+       file_outx='test_dump_tttt_mm.nc'
+       write(file_outx(11:14),'(i4.4)')icccount
+      write(file_outx(16:17),'(i2.2)')myid
+       if(myid.eq.0) print*,'write test ',file_outx 
+       call nc_create(file_outx,overwrite=.TRUE.
+     &,netcdf4=.TRUE.,author="Ute Daewel")
+       call nc_write_dim(file_outx,"lat",x=65.+59./60.,dx=-6./60.,nx=m,
+     &units="degrees_north")
+      call nc_write_dim(file_outx,"lon",x=-4.-10./60.,dx=10./60.,nx=n,
+     &units="degrees_east")
+      call nc_write_dim(file_outx,"layer",x=1.,dx=1.,nx=ilo)
+               do ibio=1,nsed
+c      do ibio=3,nbio
+      call deco1d3d (dudo3,dTsed(:,ibio),ndrei)
+      write(ncoutname(1:2),'(i2.2)')ibio
+      call nc_write(file_outx,ncoutname,
+     &dudo3(:,:,:),dim1="lat",dim2="lon",
+     &dim3="layer",start=[1,1,1],count=[m,n,ilo])
+      enddo
+       endif
+c-------------------------------------------------------------
 
 c-----par rausschreiben--------------------------------------
 c	if(rlicht(1).ne.0.)then
@@ -3646,32 +3956,33 @@ cc	do j=1,-1
 #else
       do lw=1,khor
 #endif
-	nwet=id3sur(lw)
-	i=iwet(lw);j=jwet(lw);
+        nwet=id3sur(lw)
+        i=iwet(lw);j=jwet(lw);
 *T
-	Tc_flux_r(lw,1)=tec(nwet)*zriv(i,j)	  ![DegC*m*time step]
-	Tc_flux_e(lw,1)=tec(nwet)*zpe(i,j)	  ![DegC*m*time step]
+        Tc_flux_r(lw,1)=tec(nwet)*zriv(i,j)	  ![DegC*m*time step]
+        Tc_flux_e(lw,1)=tec(nwet)*zpe(i,j)	  ![DegC*m*time step]
 *S
-	Tc_flux_r(lw,2)=sac(nwet)*zriv(i,j)	  ![DegC*m*time step]
-	Tc_flux_e(lw,2)=sac(nwet)*zpe(i,j)	  ![DegC*m*time step]
+        Tc_flux_r(lw,2)=sac(nwet)*zriv(i,j)	  ![DegC*m*time step]
+        Tc_flux_e(lw,2)=sac(nwet)*zpe(i,j)	  ![DegC*m*time step]
 *Tc
-c      do ibio=3,nbio
-c	Tc_flux_r(lw,ibio)=zriv_bio(ibio,i,j)	 ![mmolX*m/time step]
-c        if(i.eq.indm(153).and.j.eq.indn(153).and.ibio.eq.ino3)then
-c       lwx=lw
-c       endif
-
+#ifdef _FABM_ !load river fluxes etc.
+       if (apply_fabm)then
+       do ibio=3,nbio
 c	Tc_flux_e(lw,ibio)=0.			       ![mmolX*m/time step]
-c	if (ibio.eq.ino3)then
-c	Tc_flux_e(lw,ibio)=wetNH4(i,j)		![mmolX*m/time step]
-c	elseif (ibio.eq.inh4)then
-c	Tc_flux_e(lw,ibio)=wetNO3(i,j)		![mmolX*m/time step]
-c	else
-c	Tc_flux_e(lw,ibio)=0.			       ![mmolX*m/time step]
-c	endif
-
+        Tc_flux_r(lw,ibio)=zriv_bio(ibio,i,j)	 ![mmolX*m/time step]
+c        Tc_flux_e(lw,ibio)=0.			       ![mmolX*m/time step]
+         if (ibio.eq.fabm_var_index('nh4')+2)then
+        Tc_flux_e(lw,ibio)=wetNH4(i,j)		![mmolX*m/time step]
+         elseif (ibio.eq.fabm_var_index('no3')+2)then
+        Tc_flux_e(lw,ibio)=wetNO3(i,j)		![mmolX*m/time step]
+        else
+        Tc_flux_e(lw,ibio)=0.			       ![mmolX*m/time step]
+        endif
+        
 	enddo
-
+        endif !apply_fabm
+	enddo
+#endif
 #ifdef MPI
        do k=1,khorl
        lw=lzet(k)
@@ -3719,11 +4030,15 @@ c      enddo
 *New salinity:
       sac(id3sur(lw))=sac(id3sur(lw))*d_rho
 c----------new nutrient concentrations ----------------------------------
+#ifdef _FABM_ !load river fluxes etc.
+       if (apply_fabm)then
 
-c      do ibio=3,nbio
-c      Tc(id3sur(lw),ibio)=Tc(id3sur(lw),ibio)*(vol_new-dzet)/(vol_new)+
-c     &Tc_flux_all(lw,ibio)/(vol_new)
-c      enddo
+      do ibio=3,nbio
+      Tc(id3sur(lw),ibio)=Tc(id3sur(lw),ibio)*(vol_new-dzet)/(vol_new)+
+     &Tc_flux_all(lw,ibio)/(vol_new)
+      enddo
+       endif !apply_fabm
+#endif
       enddo
       enddo
       
@@ -3814,8 +4129,6 @@ c      goto 11199
 	enddo !k=1,lump
       enddo
       enddo
-c      print*,'test4',umax,uminm,vmax,vmin,wmax,wmin
-c	print*,'computing strom done'
 #ifdef MPI
       CALL MPI_ALLGATHER(umax,1,MPI_REAL,rumax,1,MPI_REAL,
      &MPI_COMM_WORLD,IERR)
@@ -4054,6 +4367,29 @@ c     &(mod(ip+ireadmet-1,ireadmet).eq. 0)) then
      *idepb2,icdept2
      *,idept2,ncsendb2,nsendb2,ncsendt2,nsendt2,nbhlayer2,nthlayer2)
 #endif
+#ifdef _FABM_ !set boundary for biomass & nutrients
+cc     set necessary equal boundary lines for biomass and nutrients
+        if (apply_fabm)then
+c        do ivar=3,nbio
+c        ibio=0
+c        if(ivar.eq.fabm_var_index('no3')+2)then
+c        ibio=ino3
+cc        print*,'test bio_bd 2',ivar,ibio,bio_rum(1:10,ibio)
+c        elseif(ivar.eq.fabm_var_index('pho')+2)then
+c        ibio=ipo4
+c        elseif(ivar.eq.fabm_var_index('sil')+2)then
+c        ibio=isio
+c        elseif(ivar.eq.fabm_var_index('opa')+2)then
+c        ibio=iop
+c        elseif(ivar.eq.fabm_var_index('oxy')+2)then
+c        ibio=io2
+c        endif
+        call bioneu(iindex,izet,time,irum)    !set equal boundary lines biologY CHECK KKKKKKK 
+c        call bioneu(iindex,izet,time,ivar,ibio)    !set equal boundary lines biologY CHECK KKKKKKK 
+c        enddo
+        endif !apply_fabm    
+#endif
+
 #ifdef MPI
       call MPI_Waitall(nreq1, ir_r_b, status, ierr)
       INUM1=0
@@ -4204,6 +4540,42 @@ C	fql(i) = evap(i)*(-1.0)*xlat
 	  fqlmit(lw) = fqlmit(lw)+fql(lw)
 	enddo
 
+c-----------------------------------------------------------------------
+c     accumulate biology to daily means
+c-----------------------------------------------------------------------
+#ifdef _FABM_
+        if (apply_fabm) then
+#ifndef MPI
+       do nwet=1,ndrei
+       do ibio=3,nbio
+       Tc_mit(nwet,ibio)=Tc_mit(nwet,ibio)+Tc(nwet,ibio)
+       enddo
+       do ised=1,nsed
+       Tc_mit(nwet,nbio+ised)=Tc_mit(nwet,nbio+ised)+Tsed(nwet,ised) !sediment 1 to outputfile
+       enddo
+       enddo
+#else
+       do J=J1,J2
+       lwa=lb0(J)
+       lwe=le0(J)
+       if(lwe .ge. lwa) then
+       nwet1=indwet(lwa)+1
+       nwet2=indwet(lwe)+lazc(lwe)
+       do k=nwet1,nwet2
+       do ibio=3,nbio
+       Tc_mit(k,ibio)=Tc_mit(k,ibio)+Tc(k,ibio)
+       enddo
+       do ised=1,nsed
+       Tc_mit(k,nbio+ised)=Tc_mit(k,nbio+ised)+Tsed(k,ised)  !sediment 1 to outputfile
+       enddo
+      enddo
+       endif
+       enddo
+
+#endif
+      endif !apply_fabm
+#endif
+
 #ifdef MPI
       if(.not. progno) then
       if((withice .and. (mod(ip+i_ice,i_ice).eq.0)) .or.
@@ -4297,6 +4669,15 @@ c-----------------------------------------------------------------------
 	  scmit(lw) = scmit(lw)*rsteps
 	  tcmit(lw) = tcmit(lw)*rsteps
 	enddo
+#ifdef _FABM_
+       if(apply_fabm)then
+       do ibio=3,nbio+nsed   !+3 sediment groups
+         do lw=1,ndrei
+          Tc_mit (lw,ibio)=Tc_mit(lw,ibio)*rsteps
+          enddo
+        enddo
+       endif
+#endif
 
 #else
       do J=J1,J2
@@ -4317,6 +4698,23 @@ c-----------------------------------------------------------------------
 	endif
 	enddo
 
+#ifdef _FABM_
+      if(apply_fabm)then
+      do ibio=3,nbio+nsed  !+3 sediment groups
+      do J=J1,J2
+      lwa=lb0(J)
+      lwe=le0(J)
+      if(lwe .ge. lwa) then
+      nwet1=indwet(lwa)+1
+      nwet2=indwet(lwe)+lazc(lwe)
+      do k=nwet1,nwet2
+      Tc_mit (k,ibio)=Tc_mit(k,ibio)*rsteps
+        enddo
+        endif
+        enddo
+        enddo
+        endif !apply_fabm
+#endif
 #endif
 
 
@@ -4344,24 +4742,85 @@ c	if(nday.eq.itagend)	 ! monthly backup
      & call IO_start_physics_p(nout1,mjar,lmon,nday,ivier,ip,imal)
 #endif
 #ifdef _FABM_
+      if(apply_fabm)then
        call ftrace_region_begin ('biological_output')
 
 c--------------------------------------------------
-c--for now just copy pelagic and benthoc variables to bio_out
+*-------write Biologycal reactions flu_mit(ndrei,nflu), daily means
 c-------------originally that are the daily means
 
-       do ibio=1,nbio
-       bio_out(:,ibio)=Tc(:,ibio)
-       enddo
-       do ibio=1,nsed
-       bio_out(:,nbio+ibio)=Tc(:,ibio)
-       enddo
-c----------------------
 #ifndef MPI
-       write (nout_b) bio_out
+c       inbio=size(Tc_mit,2)
+c       call change_units(Tc_mit,2,inbio)
+
+        write (nout_b) bio_out
+      call Rzero(Tc_mit,ndrei*(nbio+nsed))
+*-------write current
+      if(nday.eq.itagend) then
+c       inbio=size(Tc,2)
+c       call change_units(Tc,2,inbio)
+       do ii=1,nsed
+        do jj=1,ndrei
+       bio_out(jj,nbio+ii)=Tsed(jj,ii)
+        enddo
+       enddo
+        write (nout_b) bio_out
+      endif
+c          flu = flu*dt
+c          write (nout_f) flu
+
 #else
 !KB
-       DO ib=1,nbio
+c       inbio=size(Tc_mit,2)
+c       call change_units(Tc_mit,2,inbio)
+c       flu = flu*dt
+       DO ib=3,nbio+nsed
+       bio_out(:,ib)=Tc_mit(:,ib)
+       DO J=J1,J2
+       lwa=lb0(J)
+       lwe=le0(J)
+       if(lwe .ge. lwa) then
+       nwet1=indwet(lwa)+1
+       nwet2=indwet(lwe)+lazc(lwe)
+c       write (nout_b1) (bio_out(k,ib),k=nwet1,nwet2)
+       write (nout_b1) (Tc_mit(k,ib),k=nwet1,nwet2)
+c       write (nout_b1) (Tc(k,ib),k=nwet1,nwet2)
+       endif
+       enddo
+       enddo
+c       DO ib=1,nflu
+c       DO J=J1,J2
+c       lwa=lb0(J)
+c       lwe=le0(J)
+c       if(lwe .ge. lwa) then
+c       nwet1=indwet(lwa)+1
+c       nwet2=indwet(lwe)+lazc(lwe)
+c       write (nout_f1) (flu(k,ib),k=nwet1,nwet2)
+c       endif
+c       enddo
+c       enddo
+
+
+       if(nday.eq.itagend) then
+       inbio=size(Tc,2)
+       DO ib=3,nbio   !+3  adds sediments to output
+       bio_out(:,ib)=Tc(:,ib)
+       enddo
+c       call change_units(Tc,2,inbio)
+       DO J=J1,J2
+       lwa=lb0(J)
+       lwe=le0(J)
+       if(lwe .ge. lwa) then
+       nwet1=indwet(lwa)+1
+       nwet2=indwet(lwe)+lazc(lwe)
+       do k=nwet1,nwet2
+       do ised=1,nsed   !add sediments to output vector
+       bio_out(k,nbio+ised)=Tsed(k,ised)
+       enddo
+       enddo
+       endif
+       enddo
+       DO ib=3,nbio+nsed   !+3  adds sediments to output
        DO J=J1,J2
        lwa=lb0(J)
        lwe=le0(J)
@@ -4372,7 +4831,11 @@ c----------------------
        endif
        enddo
        enddo
+       endif
 #endif
+      call Rzero(Tc_mit,ndrei*(nbio+nsed))
+c      call Rzero(flu,ndrei*nflu)          !Biologycal reactions flu_mit(ndrei,nflu), averaged
+      endif !apply_fabm
 #endif
       ENDIF!	    if(miaout) then
 	call ftrace_region_end ('mitout')
@@ -4518,11 +4981,12 @@ c-----------------------------------------------------------------------
      &,form='unformatted')
        endif
 #ifdef _FABM_
-       if(lmon .eq. 12) close(nout_start)
 !this need to be fixed Ute 26.5.20 adjust number of output parameters
+       if (apply_fabm) then
        call combine_output_bio(nout_b,pathout,monat,ppp,
-c     & mjar,icord,itagend,nout_start,lmon,toutsteps,5)  !npel=5 hardcoded
-     & mjar,icord,itagend,nout_start,lmon,toutsteps,nbio+nsed)  !npel=5 hardcoded
+     & mjar,icord,itagend,nout_start,lmon,toutsteps)  !npel=5 hardcoded
+       if(lmon .eq. 12) close(nout_start)
+       endif
 #endif
        endif
        CALL MPI_BARRIER(MPI_COMM_WORLD,IERR)

@@ -16,24 +16,31 @@ private
 
    class (type_fabm_model), pointer :: model
    integer :: ny,nx,nz ! size of the FABM 3D model
+                       ! y (ny -> from north), x (nx -> from west), z (nz -> from top)
+   integer :: npel,nsed,khor,ndrei
+
    integer, dimension(:), allocatable :: variable_order
 
-   integer :: fabmunit=120
+!KB   integer :: fabmunit=120
+   integer :: fabmunit=0
    integer :: stat
-   integer :: m,n,ilo
-   integer :: nbio,nsed,khor,ndrei
 
-   real, allocatable, dimension(:,:), target :: bottom_stress 
-   real, allocatable, dimension(:,:,:,:), target :: pelagic 
+   real, public, allocatable, dimension(:,:,:,:), target :: vertical_movement
+
    real, allocatable, dimension(:,:,:), target :: h 
-   real, allocatable, dimension(:,:,:), target :: sediment 
-   logical, allocatable, dimension(:,:,:) :: mask 
-   integer, allocatable, dimension(:,:), target :: bindx 
+   logical, allocatable, dimension(:,:,:) :: fabm_mask
+
+   real, allocatable, dimension(:,:,:,:), target :: pelagic 
    real, allocatable, dimension(:,:,:), target :: surf_flux 
    real, allocatable, dimension(:,:,:), target :: surf_sms 
    real, allocatable, dimension(:,:,:,:), target :: interior_sms
    real, allocatable, dimension(:,:,:), target :: bott_flux 
    real, allocatable, dimension(:,:,:), target :: bottom_sms
+
+   real, allocatable, dimension(:,:,:), target :: sediment 
+   real, allocatable, dimension(:,:), target :: bottom_stress 
+   integer, allocatable, dimension(:,:), target :: bindx 
+
 
 #ifndef MPI
    integer :: myid=0
@@ -47,39 +54,39 @@ private
 contains
 
 #ifndef MPI
-subroutine configure_fabm(m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
+subroutine configure_fabm(m,n,ilo,khor_,ndrei_,nbio,nsed_)
 #else
-subroutine configure_fabm(myid,m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
+subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
    integer, intent(in) :: myid
 #endif
-   integer, intent(in) :: m_,n_,ilo_ ! y (m -> from north), x (n -> from west), z (ilo -> from top)
+   integer, intent(in) :: m,n,ilo ! y (m -> from north), x (n -> from west), z (ilo -> from top)
    integer, intent(in) :: khor_
    integer, intent(in) :: ndrei_
-   integer, intent(in) :: nbio_
+   integer, intent(in) :: nbio
    integer, intent(in) :: nsed_
 
    integer :: ivar,nvar
 
-   m=m_
-   n=n_
-   ilo=ilo_
+   ny=m
+   nx=n
+   nz=ilo
    ndrei=ndrei_
    khor=khor_
-   nbio=nbio_
+   npel=nbio
    nsed=nsed_
 
    if (myid .eq. 0) then
       write(fabmunit,*) 'configure_fabm()'
-      write(fabmunit,*) '  m,n,ilo= ',m,n,ilo
-      write(fabmunit,*) '  ndrei=   ',ndrei
-      write(fabmunit,*) '  khor=    ',khor
-      write(fabmunit,*) '  nbio=    ',nbio
-      write(fabmunit,*) '  nsed=    ',nsed
+      write(fabmunit,*) '  ny,nx,nz= ',ny,nx,nz
+      write(fabmunit,*) '  ndrei=    ',ndrei
+      write(fabmunit,*) '  khor=     ',khor
+      write(fabmunit,*) '  npel=     ',npel
+      write(fabmunit,*) '  nsed=     ',nsed
    end if
 
    model => fabm_create_model('fabm.yaml')
 
-   call allocate_fabm(myid,m,n,ilo,nbio,nsed)
+   call allocate_fabm(myid)
 
    if (myid .eq. 0) then
       do ivar=1,size(model%interior_state_variables)
@@ -91,7 +98,6 @@ subroutine configure_fabm(myid,m_,n_,ilo_,khor_,ndrei_,nbio_,nsed_)
          write(fabmunit,*) ivar,trim(model%bottom_state_variables(ivar)%name)
       end do
    end if
-   return
 end subroutine configure_fabm
 
 !-----------------------------------------------------------------------
@@ -99,11 +105,13 @@ end subroutine configure_fabm
 #ifndef MPI
 subroutine initialize_fabm(lazc,dt,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
 #else
-subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
+subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,Tsed,einstr,taubot)
    integer, intent(in) :: myid
 #endif
    real, intent(in) :: dt
-   integer, intent(in) :: lazc(:),iwet(:),indend(:),icord(:,:)
+   integer, intent(in) :: iwet(:),indend(:),lazc(:)
+   integer, intent(in) :: lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
+   integer, intent(in) :: icord(:,:)
    real, intent(in) :: pd2(:,:,:)
    real, intent(in) :: Tc(:,:)
    real, intent(in) :: Tsed(:,:)
@@ -116,47 +124,42 @@ subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,tau
    write(fabmunit,*) 'initialize_fabm()',myid
 
    if(myid .eq. 0) then
-       write(fabmunit,*) size(lazc),shape(lazc),rank(lazc)
-       write(fabmunit,*) lbound(lazc),ubound(lazc)
        write(fabmunit,*) size(iwet),shape(iwet),rank(iwet)
        write(fabmunit,*) lbound(iwet),ubound(iwet)
        write(fabmunit,*) size(indend),shape(indend),rank(indend)
        write(fabmunit,*) lbound(indend),ubound(indend)
+       write(fabmunit,*) size(lazc),shape(lazc),rank(lazc)
+       write(fabmunit,*) lbound(lazc),ubound(lazc)
+
+       write(fabmunit,*) size(lb0),shape(lb0),rank(lb0)
+       write(fabmunit,*) lbound(lb0),ubound(lb0)
+       write(fabmunit,*) size(le0),shape(le0),rank(le0)
+       write(fabmunit,*) lbound(le0),ubound(le0)
+       write(fabmunit,*) size(indwet),shape(indwet),rank(indwet)
+       write(fabmunit,*) lbound(indwet),ubound(indwet)
+
        write(fabmunit,*) size(Tc),shape(Tc),rank(Tc)
        write(fabmunit,*) lbound(Tc),ubound(Tc)
        write(fabmunit,*) size(Tsed),shape(Tsed),rank(Tsed)
        write(fabmunit,*) lbound(Tsed),ubound(Tsed)
    end if
 
-   ! FABM pelagics is being 'initialized'
+   ! FABM variables are being 'initialized'
    pelagic = -10.
-   do l=1,nbio
-#ifdef MPI
-      call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
-#else
-      call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
-#endif
-   end do
+   sediment = -10.
+   call unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
 
-   do l=1,nsed
-#ifdef MPI
-      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#else
-      call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#endif
-   end do
-
-   ! here we initialize the 3D calculation mask
+   ! here we initialize the 3D calculation fabm_mask
    bindx = 0
    ! is serial and parallel the same?
    call deco1d2di(bindx,lazc,iwet,indend,1)
-   mask = .false.
-   do i=1,n
-      do j=1,m
-         if(bindx(j,i) .gt. 0) mask(j,i,1:bindx(j,i)) = .true.
+   fabm_mask = .false.
+   do i=1,nx
+      do j=1,ny
+         if(bindx(j,i) .gt. 0) fabm_mask(j,i,1:bindx(j,i)) = .true.
       end do
    end do
-   call print_mask(myid,m,n,icord)
+   call print_mask(myid,ny,nx,icord)
 
    ! to save some typing
    jl = icord(myid+1,1)
@@ -164,32 +167,25 @@ subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,tau
    il = icord(myid+1,3)
    ih = icord(myid+1,4)
 
-   call model%set_domain(m,n,ilo,dt)
+   call model%set_domain(ny,nx,nz,dt)
    call model%set_domain_start(jl,il,1)
-   call model%set_domain_stop(jh,ih,ilo) 
+   call model%set_domain_stop(jh,ih,nz) 
    call model%set_bottom_index(bindx(:,:))
-   call model%set_mask(mask,mask(:,:,1))
+   call model%set_mask(fabm_mask,fabm_mask(:,:,1))
 
-#if 0
-   write(*,*) jl,jh
-   write(*,*) il,ih
-   write(*,*) 1,ilo
-   write(*,*) size(pd2(1:m,1:n,1:ilo))
-#endif
-   call model%link_interior_data(fabm_standard_variables%cell_thickness, pd2(1:m,1:n,1:ilo))
+   call model%link_interior_data(fabm_standard_variables%cell_thickness, pd2(1:ny,1:nx,1:nz))
 
    ! set pointers to environmental forcing
-   call model%link_horizontal_data(fabm_standard_variables%surface_downwelling_shortwave_flux, einstr(1:m,1:n))
+   call model%link_horizontal_data(fabm_standard_variables%surface_downwelling_shortwave_flux, einstr(1:ny,1:nx))
 !   call model%link_horizontal_data(standard_variables%wind_speed,wspd_fabm(1:ii, 1:jj))
 !   call model%link_horizontal_data(standard_variables%mole_fraction_of_carbon_dioxide_in_air,atmco2_fabm(1:ii,1:jj))
-   call model%link_horizontal_data(fabm_standard_variables%bottom_stress, taubot(1:m,1:n))
+   call model%link_horizontal_data(fabm_standard_variables%bottom_stress, taubot(1:ny,1:nx))
 
    call model%link_interior_data(fabm_standard_variables%temperature, pelagic(:,:,:,1))
    call model%link_interior_data(fabm_standard_variables%practical_salinity, pelagic(:,:,:,2))
 
    ! link to pelagic state variables
    do ivar = 1,size(model%interior_state_variables)
-!KB      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar+2))
       call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar))
    end do
    ! link to benthic state variables
@@ -200,25 +196,26 @@ subroutine initialize_fabm(myid,dt,lazc,iwet,indend,icord,pd2,Tc,Tsed,einstr,tau
    call model%start()
 !KB - check this - only if not restart
 #if 1
-   do k=1,ilo
+   do k=1,nz
       do i=il,ih
          call model%initialize_interior_state(jl,jh,i,k)
       end do      
    end do      
+   do i=il,ih
+      call model%initialize_bottom_state(jl,jh,i)
+   end do
 !   call model%initialize_bottom_state()
 #endif   
-
-   return
 end subroutine initialize_fabm
 
 !-----------------------------------------------------------------------
 
-!KBsubroutine update_fabm(myid,imal,dt,iwet,indend,Tc,Tsed,dTc,dTsed)
-subroutine update_fabm(myid,imal,iwet,indend,ltief,pd2,Tc,Tsed,dTc,dTsed)
+subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Tsed,dTc,dTsed)
    integer, intent(in) :: myid
    integer, intent(in) :: imal
-!KB   real, intent(in) :: dt
-   integer, intent(in) :: iwet(:),indend(:),ltief(:,:)
+   integer, intent(in) :: iwet(:),indend(:)
+   integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
+   integer, intent(in) :: ltief(:,:)
    real, dimension(:,:,:), intent(inout) :: pd2
    real, dimension(:,:), intent(inout) :: Tc
    real, dimension(:,:), intent(inout) :: Tsed
@@ -233,28 +230,14 @@ subroutine update_fabm(myid,imal,iwet,indend,ltief,pd2,Tc,Tsed,dTc,dTsed)
    if (myid .eq. 0) then
       write(*,*) 'update_fabm()'
    end if
+
 call cpu_time(decode_start)
-   do l=1,nbio
-#ifdef MPI
-      call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
-#else
-      call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
-#endif
-   end do
-   do l=1,nsed
-#ifdef MPI
-      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#else
-      call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#endif
-   end do
+   call unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
 call cpu_time(decode_stop)
 decode_timing=decode_timing+decode_stop-decode_start
 
 call cpu_time(fabm_start)
    call model%prepare_inputs(t=real(imal,rk))
-
-! get_vertical_move - maybe send individually
 
    ! here the surface is updated
    surf_flux = 0.
@@ -264,7 +247,7 @@ call cpu_time(fabm_start)
 
    ! here the pelagic is updated
    interior_sms = 0.
-   do k=1,ilo
+   do k=1,nz
       do i=il,ih
          call model%get_interior_sources(jl,jh,i,k,interior_sms(jl:jh,i,k,:))
       end do
@@ -291,34 +274,26 @@ call cpu_time(fabm_start)
       end do
    end do
 
+   ! vertical velocities
+   do k=1,nz
+      do i=il,ih
+         call model%get_vertical_movement(jl,jh,i,k,vertical_movement(jl:jh,i,k,:))
+      end do
+   end do
+
    call model%finalize_outputs()
+
 call cpu_time(fabm_stop)
 fabm_timing=fabm_timing+fabm_stop-fabm_start
 
 call cpu_time(encode_start)
-   do l=3,nbio
-#ifdef MPI
-      call comp3d1d_s(interior_sms(:,:,:,l-2),dTc(:,l))
-#else
-      call comp3d1d(interior_sms(:,:,:,l-2),dTc(:,l))
-#endif
-   end do
-   do l=1,nsed
-#ifdef MPI
-      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
-!KB      call comp2d1d_s(sediment(:,:,l),Tsed(:,l))
-#else
-      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
-#endif
-   end do
+   call pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
 call cpu_time(encode_stop)
 encode_timing=encode_timing+encode_stop-encode_start
 
 write(100+myid,*) 'decode: ',myid,decode_timing
 write(100+myid,*) 'fabm:   ',myid,fabm_timing
 write(100+myid,*) 'encode: ',myid,encode_timing
-
-   return
 end subroutine update_fabm
 
 !-----------------------------------------------------------------------
@@ -332,52 +307,177 @@ end subroutine clean_fabm
 
 !-----------------------------------------------------------------------
 
-subroutine allocate_fabm(myid,m,n,ilo,nbio,nsed)
+subroutine allocate_fabm(myid)
    integer, intent(in) :: myid
-   integer, intent(in) :: m,n,ilo ! y (m -> from north), x (n -> from west), z (ilo -> from top)
-   integer, intent(in) :: nbio
-   integer, intent(in) :: nsed
 
    if (myid .eq. 0) then
       write(fabmunit,*) 'allocate_fabm()'
    end if
 
-   allocate(bottom_stress(m,n),stat=stat)
+   allocate(bottom_stress(ny,nx),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bottom_stress)'
 
-   allocate(h(m,n,ilo),stat=stat)
+   allocate(h(ny,nx,nz),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (h)'
 
-!   allocate(variable_order(3:nbio),stat=stat)
+!   allocate(variable_order(3:npel),stat=stat)
 !   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (variable_order)'
 
-   allocate(pelagic(m,n,ilo,nbio),stat=stat)
+   allocate(pelagic(ny,nx,nz,npel),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (pelagic)'
 
-   allocate(sediment(m,n,nsed),stat=stat)
+   allocate(sediment(ny,nx,nsed),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (sediment)'
 
-   allocate(mask(m,n,ilo),stat=stat)
-   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (mask)'
+   allocate(fabm_mask(ny,nx,nz),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (fabm_mask)'
 
-   allocate(bindx(m,n),stat=stat)
+   allocate(bindx(ny,nx),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bindx)'
 
-   allocate(surf_flux(m,n,nbio-2),stat=stat)
+   allocate(surf_flux(ny,nx,npel-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (surf_flux)'
 
-!KB   allocate(interior_sms(m,n,ilo,3:nbio),stat=stat)
-   allocate(interior_sms(m,n,ilo,nbio-2),stat=stat)
+   allocate(interior_sms(ny,nx,nz,npel-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (interior_sms)'
 
-   allocate(bott_flux(m,n,nbio-2),stat=stat)
+   allocate(bott_flux(ny,nx,npel-2),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_flux)'
 
-   allocate(bottom_sms(m,n,nsed),stat=stat)
+   allocate(bottom_sms(ny,nx,nsed),stat=stat)
    if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (bott_sms)'
 
-   return
+   allocate(vertical_movement(ny,nx,nz,npel-2),stat=stat)
+   if (stat /= 0) stop 'allocate_fabm(): Error allocating memory (vertical_movement)'
 end subroutine allocate_fabm
+
+!-----------------------------------------------------------------------
+
+subroutine unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
+   integer, intent(in) :: iwet(:),indend(:)
+   integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:)
+   real, intent(in) :: Tc(:,:)
+   real, intent(in) :: Tsed(:,:)
+
+   integer :: l
+
+   do l=1,npel
+#ifdef MPI
+      call deco1d3d_s(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#else
+      call deco1d3d(pelagic(:,:,:,l),Tc(:,l),ndrei)
+#endif
+   end do
+
+#if 1
+   unpack: block
+   integer ised
+   integer :: J,J1,J2
+   integer :: lw,lwa,lwe
+   integer :: i,lump,nwet,k
+
+   do ised=1,nsed
+#ifdef MPI
+      do J=J1,J2
+         lwa = lb0(J)
+         lwe = le0(J)
+#else
+      do j=1,n
+         lwa = lwe+1
+         lwe = indend(j)
+#endif
+         do lw=lwa,lwe
+            i = iwet(lw)
+            lump = lazc(lw)
+            nwet = indwet(lw)
+            do k=1,lump
+               nwet = nwet+1
+               if(k.eq.lazc(lw)) then
+                  sediment(i,j,ised)=Tsed(nwet,ised)
+               endif
+            enddo
+         enddo
+      enddo
+   enddo
+   end block unpack
+
+#else
+
+   do l=1,nsed
+#ifdef MPI
+      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#else
+      call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
+#endif
+   end do
+#endif
+end subroutine unpack_data
+
+!-----------------------------------------------------------------------
+
+subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
+   integer, intent(in) :: iwet(:),indend(:)
+   integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:)
+   real, intent(inout) :: dTc(:,:)
+   real, intent(inout) :: dTsed(:,:)
+
+   integer :: l
+
+   do l=3,npel
+#ifdef MPI
+      call comp3d1d_s(interior_sms(:,:,:,l-2),dTc(:,l))
+#else
+      call comp3d1d(interior_sms(:,:,:,l-2),dTc(:,l))
+#endif
+   end do
+
+#if 1
+   pack: block
+   integer ised
+   integer :: J,J1,J2
+   integer :: lw,lwa,lwe
+   integer :: i,lump,nwet,k
+
+   do ised=1,nsed
+#ifdef MPI
+      do J=J1,J2
+         lwa = lb0(J)
+         lwe = le0(J)
+#else
+      do j=1,n
+         lwa = lwe+1
+         lwe = indend(j)
+#endif
+         do lw=lwa,lwe
+            i = iwet(lw)
+            lump = lazc(lw)
+            nwet = indwet(lw)
+            do k=1,lump
+               nwet = nwet+1
+               if(k.eq.lazc(lw)) then
+                  dTsed(nwet,ised)=bottom_sms(i,j,ised)
+               else
+                  dTsed(nwet,ised)=0.
+               endif
+            enddo
+         enddo
+      enddo
+   enddo
+   end block pack
+
+#else
+
+   do l=1,nsed
+#ifdef MPI
+      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+#else
+      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+#endif
+   end do
+#endif
+end subroutine pack_data
+
+!-----------------------------------------------------------------------
 
 function fabm_var_index(varname) result(nvar)
    character(len=*), intent(in) :: varname
@@ -403,7 +503,6 @@ function fabm_var_index(varname) result(nvar)
       end if
    end do
    nvar = 0
-   return
 end function fabm_var_index
 
 !-----------------------------------------------------------------------
@@ -415,15 +514,15 @@ subroutine print_mask(myid,m,n,icord)
    integer :: i,j,l
 
    if (myid .eq. 0) then
-      write(fabmunit,*) 'global mask'
+      write(fabmunit,*) 'global fabm_mask'
       do j=1,m
-         write(fabmunit,'(5000(L1))') (mask(j,i,1), i=1,n)
+         write(fabmunit,'(*(L1))') (fabm_mask(j,i,1), i=1,n)
       end do
       do l=1,18
-         write(fabmunit,*) 'mask for domain# ',l
+         write(fabmunit,*) 'fabm_mask for domain# ',l
          write(fabmunit,*) icord(l,1),icord(l,2),icord(l,3),icord(l,4)
          do j=icord(l,1),icord(l,2)
-            write(fabmunit,'(5000(L1))') (mask(j,i,1), i=icord(l,3),icord(l,4))
+            write(fabmunit,'(*(L1))') (fabm_mask(j,i,1), i=icord(l,3),icord(l,4))
          end do
       end do
    end if

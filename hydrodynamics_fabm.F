@@ -3336,13 +3336,14 @@ c     transport of salinity and temperature
 c     TVD total variation diminishing scheme with superbee
 c     
 c-----------------------------------------------------------------------
-      include 'C_model.f'
-      include 'C_index.f'
 #ifdef _FABM_
+      use hamsom_fabm , only: vertical_movement
       include 'C_nbio_fabm.f'
 #else
       include 'C_nbio.f'
 #endif
+      include 'C_model.f'
+      include 'C_index.f'
       
       parameter(ilop1=ilo+1) 
       parameter(khor1=khor+1)
@@ -3901,34 +3902,31 @@ c south
 c#ifndef ECO2
 *Correction#4
 *----- add the joint river and P-E fluxes of the characteristics ibio=1,nbio--------
-c      if (k.eq.1) then
-c      XYadv(ll,ibio)=XYadv(ll,ibio)+Tc_flux_all(llw(ll),ibio)/dd(ll)
-c      endif
+c       if (k.eq.1) then
+c       XYadv(ll,ibio)=XYadv(ll,ibio)+Tc_flux_all(llw(ll),ibio)/dd(ll)
+c       endif
 
 c#endif
 
         SinkD_o=0.
         SinkD_u=0.
-c       print*,ibio,SinkD_o,SinkD_u,sink_opal,BioC(23),sedy0
-      
+        if(ibio.gt.2)then !biological sinking velocities 
       if (k.eq.1) then
-	      wo = 0.
-	      SinkD_o = 0.
-      endif
-        
-      if (k.eq.lazc(llw(ll))) then
-	      wu=0.
-	      SinkD_u=0.
-      endif
+       wo = 0.
+        SinkD_o = 0.
+       SinkD_u =vertical_movement(i,j,k+1,ibio-2)*r_dt_dd(ll+1)    !BioC(23) [m/s]
+      elseif (k.eq.lazc(llw(ll))) then
+       wu=0.
+       SinkD_u=0.
+       SinkD_o =vertical_movement(i,j,k,ibio-2)*r_dt_dd(ll)    !BioC(23) [m/s]
+      else
+       SinkD_o =vertical_movement(i,j,k,ibio-2)*r_dt_dd(ll)    !BioC(23) [m/s]
+       SinkD_u =vertical_movement(i,j,k+1,ibio-2)*r_dt_dd(ll+1)    !BioC(23) [m/s]
 
-
-c     if (ibio.eq.7.or.ibio.eq.14) then  ! Sinking for Detritus and Opal only
+       endif
+         endif
          D_o2=SinkD_o		 
          D_u2=SinkD_u
-c     else
-c        D_o2=0.		 
-c        D_u2=0.
-c     endif
 
 
 c     TVD scheme

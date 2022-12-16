@@ -2316,8 +2316,8 @@ c-------------------------------------------------------------------
       
        inumeintr=numeintr+3  
 cKB      read(nfuriv,'(<inumeintr>e16.7)')iijahr,iimonth,iiday,
-      read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
-c      read(nfuriv,'(225e16.7)')iijahr,iimonth,iiday,
+c      read(nfuriv,'(222e16.7)')iijahr,iimonth,iiday,
+      read(nfuriv,'(225e16.7)')iijahr,iimonth,iiday,
      &(rivinp(num),num=1,numeintr)
        if(myid.eq.0)then
        print*,'read riv: ', iijahr,iimonth,iiday,
@@ -2335,8 +2335,8 @@ c-------------------------------------------------------------------------------
       parameter (ips=3,ipl=4,ibg=15,izs=5,izl=6,idet=7,inh4=8,
      &idom=9,ino3=10,ipo4=11,isio=12,io2=13,iop=14,ifi1=16,
      &ised1=1,ised2=2,ised3=3,imb1=4)
-      dimension f(ndrei,*)
-      common /bio_out/bio_out(ndrei,nbio+nsed)  !npel
+      dimension f(ndrei,3:nbio+nsed)
+c      common /bio_out/bio_out(ndrei,3:nbio+nsed) 
       real REDF(10)
 c/////redfield ratios/////
        DATA
@@ -2351,45 +2351,38 @@ c/////redfield ratios/////
      &      REDF(9)/30.97/,   ! mmolP/mgP
      &      REDF(10)/28.09/   ! mmolSi/mgSi
        if(n_choice.eq.1)then
-
+        ! if(myod.eq.10)print*,'test',size(1,1:18)
 *------change units
          do l=1,ndrei
-         do ibio=3,7  !Ps, Pl, Zs, Zl, De
-         bio_out(l,ibio)=f(l,ibio)        !*REDF(6)  !input in   mgC /m**3 to [mmolC/m**3]
-         enddo
-         bio_out(l,idom)=bio_out(l,idom)  !dom ==det
-c         bio_out(l,idom)=f(l,idom)  !dom ==det
-         bio_out(l,inh4)=f(l,inh4)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
-         bio_out(l,ino3)=f(l,ino3)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
-         bio_out(l,ipo4)  =f(l,ipo4)  *REDF(2)*REDF(6)  !input in mmolP /m**3 to [mmolC/m**3]
-         bio_out(l,isio)  =f(l,isio)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
-         bio_out(l,iop)  =f(l,iop)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+         f(l,inh4)=f(l,inh4)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
+         f(l,ino3)=f(l,ino3)*REDF(1)*REDF(6)  !input in mmolN /m**3 to [mmolC/m**3]
+         f(l,ipo4)  =f(l,ipo4)  *REDF(2)*REDF(6)  !input in mmolP /m**3 to [mmolC/m**3]
+         f(l,isio)  =f(l,isio)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
+         f(l,iop)  =f(l,iop)  *REDF(3)*REDF(6)  !input in mmolSi/m**3 to [mmolC/m**3]
 
-         bio_out(l,io2)  =f(l,io2)  *REDF(7)          !input in milliliters O2/liter to  mmolO2/m**3
+         f(l,io2)  =f(l,io2)  *REDF(7)          !input in milliliters O2/liter to  mmolO2/m**3
 
-        do ibio=15,inbio
-         bio_out(l,ibio)  =f(l,ibio)                    !bg
-        enddo
         enddo !l=1,nrei
 
       else
-*------change units
-         do l=1,ndrei
-         do ibio=3,7  !Ps, Pl, Zs, Zl, De
-         bio_out(l,ibio)=f(l,ibio)         !*REDF(16)  !output from [mmolC/m**3] to mgC /m**3
-         enddo
-         bio_out(l,idom)=f(l,idom)
-         bio_out(l,inh4)=f(l,inh4)*1./REDF(1)*1./REDF(6)  !output from [mmolC/m**3] to mmolN /m**3
-         bio_out(l,ino3)=f(l,ino3)*1./REDF(1)*1./REDF(6)  !output from [mmolC/m**3] to mmolN /m**3
-         bio_out(l,ipo4)  =f(l,ipo4)  *1./REDF(2)*1./REDF(6)  !output from [mmolC/m**3] to mmolP /m**3
-         bio_out(l,isio)  =f(l,isio)  *1./REDF(3)*1./REDF(6)  !output from [mmolC/m**3] to mmolSi/m**3
-         bio_out(l,iop)  =f(l,iop)  *1./REDF(3)*1./REDF(6)  !output from [mmolC/m**3] to mmolSi/m**3
-
-         bio_out(l,io2)  =f(l,io2)  *1./REDF(7)           !output from mmolO2/m**3 to mlO2/l
-       do ibio=15,inbio
-         bio_out(l,ibio)  =f(l,ibio)                    !bg
-       enddo
-       enddo !l=1,nrei
        endif
        end 
+c--------------------------------------------------------------------
+        subroutine readdepo(readwet,nfu)
+        include 'C_model.f'
+        dimension readwet(m,n)
+        character aaa*60
+
+        do i=1,8
+        read(nfu,'(a60)')aaa
+        enddo
+
+        do ii=1,m
+        read(nfu,'(207e13.5)')(readwet(ii,jj),jj=1,207)
+        enddo
+c        print*,aaa
+c        print*,readwet(1:10,1:10)
+        return
+        end
+
 #endif
