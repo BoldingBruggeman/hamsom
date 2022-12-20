@@ -33,14 +33,12 @@ private
    real, allocatable, dimension(:,:,:,:), target :: pelagic 
    real, allocatable, dimension(:,:,:), target :: surf_flux 
    real, allocatable, dimension(:,:,:), target :: surf_sms 
+   real, allocatable, dimension(:,:,:,:), target :: interior_sms
    real, allocatable, dimension(:,:,:), target :: bott_flux 
-   real, allocatable, dimension(:,:), target :: bottom_stress 
-   real, allocatable, dimension(:,:,:), target :: h 
-   logical, allocatable, dimension(:,:,:) :: fabm_mask 
-   integer, allocatable, dimension(:,:), target :: bindx 
 
    real, allocatable, dimension(:,:,:), target :: sediment 
-   real, allocatable, dimension(:,:), target :: bottom_stress 
+   real, allocatable, dimension(:,:,:), target :: bottom_sms
+   real, allocatable, dimension(:,:), target :: bottom_stress
    integer, allocatable, dimension(:,:), target :: bindx 
 
 
@@ -115,6 +113,8 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
    integer, intent(in) :: lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
    integer, intent(in) :: icord(:,:)
    real, intent(in) :: pd2(:,:,:)
+   real, intent(in) :: Tc(:,:)
+   real, intent(in) :: Tsed(:,:)
    real, intent(in) :: einstr(:,:)
    real, intent(in) :: taubot(:,:)
 
@@ -138,10 +138,10 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
        write(fabmunit,*) size(indwet),shape(indwet),rank(indwet)
        write(fabmunit,*) lbound(indwet),ubound(indwet)
 
-       write(fabmunit,*) size(Tc),shape(Tc),rank(Tc)
-       write(fabmunit,*) lbound(Tc),ubound(Tc)
-       write(fabmunit,*) size(Tsed),shape(Tsed),rank(Tsed)
-       write(fabmunit,*) lbound(Tsed),ubound(Tsed)
+!KB       write(fabmunit,*) size(Tc),shape(Tc),rank(Tc)
+!KB       write(fabmunit,*) lbound(Tc),ubound(Tc)
+!KB       write(fabmunit,*) size(Tsed),shape(Tsed),rank(Tsed)
+!KB       write(fabmunit,*) lbound(Tsed),ubound(Tsed)
    end if
 
    ! FABM variables are being 'initialized'
@@ -217,8 +217,16 @@ subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Ts
    integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
    integer, intent(in) :: ltief(:,:)
    real, dimension(:,:,:), intent(inout) :: pd2
+   real, dimension(:,:), intent(inout) :: Tc
+   real, dimension(:,:), intent(inout) :: Tsed
+   real, dimension(:,:), intent(inout) :: dTc
+   real, dimension(:,:), intent(inout) :: dTsed
 
    integer :: i,j,k,l
+
+   real :: decode_timing=0.,decode_start,decode_stop
+   real :: fabm_timing=0.,fabm_start,fabm_stop
+   real :: encode_timing=0.,encode_start,encode_stop
 
    if (myid .eq. 0) then
       write(*,*) 'update_fabm()'
@@ -506,8 +514,8 @@ subroutine print_mask(myid,ny,nx,icord)
    ic=size(icord,1)
    if (myid .eq. 0) then
       write(fabmunit,*) 'global fabm_mask'
-      do j=1,m
-         write(fabmunit,'(*(L1))') (fabm_mask(j,i,1), i=1,n)
+      do j=1,ny
+         write(fabmunit,'(*(L1))') (fabm_mask(j,i,1), i=1,nx)
       end do
       do l=1,18
          write(fabmunit,*) 'fabm_mask for domain# ',l
