@@ -12,7 +12,7 @@ implicit NONE
 
 private
 
-   EXTERNAL comp2d1d, comp3d1d, deco1d2d, deco1d3d, deco1d2di
+   EXTERNAL deco1d2di
 
    class (type_fabm_model), pointer :: model
    integer :: ny,nx,nz ! size of the FABM 3D model
@@ -33,9 +33,11 @@ private
    real, allocatable, dimension(:,:,:,:), target :: pelagic 
    real, allocatable, dimension(:,:,:), target :: surf_flux 
    real, allocatable, dimension(:,:,:), target :: surf_sms 
-   real, allocatable, dimension(:,:,:,:), target :: interior_sms
    real, allocatable, dimension(:,:,:), target :: bott_flux 
-   real, allocatable, dimension(:,:,:), target :: bottom_sms
+   real, allocatable, dimension(:,:), target :: bottom_stress 
+   real, allocatable, dimension(:,:,:), target :: h 
+   logical, allocatable, dimension(:,:,:) :: fabm_mask 
+   integer, allocatable, dimension(:,:), target :: bindx 
 
    real, allocatable, dimension(:,:,:), target :: sediment 
    real, allocatable, dimension(:,:), target :: bottom_stress 
@@ -103,7 +105,7 @@ end subroutine configure_fabm
 !-----------------------------------------------------------------------
 
 #ifndef MPI
-subroutine initialize_fabm(lazc,dt,iwet,indend,icord,pd2,Tc,Tsed,einstr,taubot)
+subroutine initialize_fabm(lazc,dt,iwet,indend,icord,pd2,einstr,taubot)
 #else
 subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,Tsed,einstr,taubot)
    integer, intent(in) :: myid
@@ -113,8 +115,6 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
    integer, intent(in) :: lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
    integer, intent(in) :: icord(:,:)
    real, intent(in) :: pd2(:,:,:)
-   real, intent(in) :: Tc(:,:)
-   real, intent(in) :: Tsed(:,:)
    real, intent(in) :: einstr(:,:)
    real, intent(in) :: taubot(:,:)
 
@@ -194,6 +194,7 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
    end do
 
    call model%start()
+
 !KB - check this - only if not restart
 #if 1
    do k=1,nz
@@ -204,7 +205,6 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
    do i=il,ih
       call model%initialize_bottom_state(jl,jh,i)
    end do
-!   call model%initialize_bottom_state()
 #endif   
 end subroutine initialize_fabm
 
@@ -217,15 +217,8 @@ subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Ts
    integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
    integer, intent(in) :: ltief(:,:)
    real, dimension(:,:,:), intent(inout) :: pd2
-   real, dimension(:,:), intent(inout) :: Tc
-   real, dimension(:,:), intent(inout) :: Tsed
-   real, dimension(:,:), intent(inout) :: dTc
-   real, dimension(:,:), intent(inout) :: dTsed
 
    integer :: i,j,k,l
-   real :: decode_timing=0.,decode_start,decode_stop
-   real :: fabm_timing=0.,fabm_start,fabm_stop
-   real :: encode_timing=0.,encode_start,encode_stop
 
    if (myid .eq. 0) then
       write(*,*) 'update_fabm()'
@@ -236,7 +229,6 @@ call cpu_time(decode_start)
 call cpu_time(decode_stop)
 decode_timing=decode_timing+decode_stop-decode_start
 
-call cpu_time(fabm_start)
    call model%prepare_inputs(t=real(imal,rk))
 
    ! here the surface is updated
@@ -505,14 +497,13 @@ function fabm_var_index(varname) result(nvar)
    nvar = 0
 end function fabm_var_index
 
-!-----------------------------------------------------------------------
-
-subroutine print_mask(myid,m,n,icord)
+subroutine print_mask(myid,ny,nx,icord)
    integer, intent(in) :: myid
-   integer, intent(in) :: m,n
+   integer, intent(in) :: ny,nx
    integer, intent(in) :: icord(:,:)
-   integer :: i,j,l
+   integer :: i,j,l,ic
 
+   ic=size(icord,1)
    if (myid .eq. 0) then
       write(fabmunit,*) 'global fabm_mask'
       do j=1,m

@@ -767,6 +767,7 @@ c	common /tsc/ sarum_old(lvrp),tarum_old(lvrp)
       enddo
       IF(myid .eq. 0)
      &print*,' boundary values bio_bd  were read, month=',nwmonht
+
       call change_units_bd(bio_rum,1)
 
       goto 1
@@ -822,6 +823,7 @@ cc	pause
 c       enddo
       return
       end
+
 
 cUD-------------------------------------------------
       subroutine change_units_bd(f,n_choice)
@@ -896,6 +898,7 @@ c        include 'C_rbio.f'
      &Tc_mit(ndrei,nbio+nsed)
 c      common /tscdb/ sarum(lvrp),tarum(lvrp),bio_rum(lvrp,nbio)
       common /biobd/ bio_rum(lvrp,nbio)
+
       integer ivar,ibio,irum(nbio)
 
 **** conditions for NO2, NO3, P, Si, O2 from WAO 01**********
@@ -914,6 +917,7 @@ c     Westrand
         l   = iindex(i,16)
         ll  = iindex(i,17)
         lll = iindex(i,18)
+
 c        if(ibio.ge.10)lll = iindex(i,17)
 c        if(ibio.eq.13)lll = iindex(i,18)
         if(irum(ivar).eq.1)lll = iindex(i,17)
@@ -933,9 +937,11 @@ c     Nordrand
 	  l   = iindex(66,j)
         ll  = iindex(67,j)
         lll = iindex(68,j)
+
 c        if(ibio.ge.10)lll = iindex(67,j)
 c        if(ibio.eq.13)lll = iindex(68,j)
         if(irum(ivar).eq.1)lll = iindex(67,j)
+
         lw  = izet(66,j)
 	             lump=0
         if(lw.gt.0)lump = lazc(lw)
@@ -944,6 +950,7 @@ c        if(ibio.eq.13)lll = iindex(68,j)
           Tc(ll+k,ivar)  = Tc(lll+k,ivar)
        enddo
       enddo
+
        enddo
 
        end 

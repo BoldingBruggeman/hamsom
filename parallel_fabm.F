@@ -203,13 +203,13 @@ c      stop
 C**********Defining INDEX for Each Processor*****************************************
       subroutine INDEX_MPI(icord)
       include 'C_mpi.f'
+      include 'C_model.f'
       dimension icord(nprocs,4)
        common /cord/ I1,I2,J1,J2,IA1,IA2,JA1,JA2,IB1,IB2,JB1,JB2
      1,ID1,ID2,JD1,JD2
       common /icecor/ ICEI1,ICEI2,ICEJ1,ICEJ2,ICEIA1,ICEIA2,ICEJA1,
      * ICEJA2,ICEX1,ICEX2,ICEY1,ICEY2,ICEP1,ICEP2,ICEQ1,ICEQ2,ICEX3,
      * ICEX4,ICEY3,ICEY4,ICEX5,ICEX6,ICEY5,ICEY6
-
       I1=icord(myid+1,1)
       I2=icord(myid+1,2)
       J1=icord(myid+1,3)
@@ -331,6 +331,12 @@ C**********Defining INDEX for Each Processor************************************
       ICEQ1=J1
       ICEQ2=J2
       endif
+cctest fic IA2=178 when nproc =1 Ute Daewel
+!      if(nprocs.eq.1)then
+!      IA2=min(IA2,m)
+!      IB2=min(IB2,m)
+!      JB2=min(JB2,n)
+!      endif
 c      WRITE(*,*) I1,I2,J1,J2,IA1,IA2,JA1,JA2,IB1,IB2,JB1,JB2,IN1,IN2,
 c     * JN1,JN2,IM1,IM2,JM1,JM2,IT1,IT2,JT1,JT2,IQ1,IQ2,JQ1,JQ2,ICEI1,
 c     * ICEI2,ICEJ1,ICEJ2
@@ -1316,7 +1322,7 @@ c-----------------------------------------------------------------------
             do ll=llb,lle
                j = indver(ll)
                i = indi(ll)
-               u(i,k,j) = ucomp(ll) 
+               u(i,k,j) = ucomp(ll)
             end do
          end if
       end do
@@ -1373,6 +1379,7 @@ c where '2' represents each subdoamin layer varing from I1-2 to I2+2
       le1=0
       lb2=0
       le2=0
+      print*,'test icord',icord,IA2
       do nn=1,nprocs
       k=0
       DO J=ICORD(nn,3),ICORD(nn,4)
@@ -1408,6 +1415,7 @@ c      ENDIF
 
 c      IF(J .GE. JA1 .AND. J .LE. JA2) THEN
       lb1(J)=izets(IA1,J)
+      
       le1(J)=izete(IA2,J)
 c      ENDIF
 
@@ -3358,16 +3366,16 @@ c      call system(rm command)
 
 **************************************************************************************************************************************************
        subroutine combine_output_bio(nout,pathout,monat,ppp,
-     & mjar,icord,itagend,nout_start,lmon,toutsteps,npel)
+     & mjar,icord,itagend,nout_start,lmon,toutsteps)
       include 'C_model.f'
       include 'C_paths.f'
       include 'C_mpi.f'
       include 'C_index.f'
+      include 'C_nbio_fabm.f'
       parameter (khor1=khor+1)
-      integer npel
       common /lbkhor/ khorl,lzet(khor),lb0(n),le0(n),
      * lb1(n),le1(n),lb2(n),le2(n)
-      dimension A(ndrei,npel)  !dimension need to be npel make sure to change here hardcoded
+      dimension A(ndrei,3:nbio+nsed)  !dimension need to be npel make sure to change here hardcoded
       character ppp*3,outfile*10
       character*19 pathout
       common /ind/ iwet(khor1),ldep(khor),lazc(khor),indend(n),
@@ -3393,7 +3401,7 @@ c      write(outfile(6:7),'(i2.2)') monat
       I22=icord(nn,2)
       J11=icord(nn,3)
       J22=icord(nn,4)
-      do ib=1,npel
+      do ib=3,nbio+nsed
       do J=J11,J22
       lwa=izets(I11,J)
       lwe=izete(I22,J)
@@ -3408,28 +3416,28 @@ c      write(outfile(6:7),'(i2.2)') monat
       write (nout) A
       enddo
       
-c      do nn=1,nprocs
-c      I11=icord(nn,1)
-c      I22=icord(nn,2)
-c      J11=icord(nn,3)
-c      J22=icord(nn,4)
-c      do ib=1,npel
-c      do J=J11,J22
-c      lwa=izets(I11,J)
-c      lwe=izete(I22,J)
-c      if(lwe .ge. lwa) then
-c      nwet1=indwet(lwa)+1
-c      nwet2=indwet(lwe)+lazc(lwe)
-c      read(600+nn)(A(k,ib),k=nwet1,nwet2)
-c      endif
-c      enddo
-c      enddo
-c      enddo
-c
-c      write (nout)A
-c      if(lmon .eq. 12) then
-c      write (nout_start)A
-c      endif
+      do nn=1,nprocs
+      I11=icord(nn,1)
+      I22=icord(nn,2)
+      J11=icord(nn,3)
+      J22=icord(nn,4)
+      do ib=3,nbio+nsed
+      do J=J11,J22
+      lwa=izets(I11,J)
+      lwe=izete(I22,J)
+      if(lwe .ge. lwa) then
+      nwet1=indwet(lwa)+1
+      nwet2=indwet(lwe)+lazc(lwe)
+      read(600+nn)(A(k,ib),k=nwet1,nwet2)
+      endif
+      enddo
+      enddo
+      enddo
+
+      write (nout)A
+      if(lmon .eq. 12) then
+      write (nout_start)A
+      endif
       do nn=1,nprocs
       close(600+nn)
       enddo
