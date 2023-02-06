@@ -2143,7 +2143,7 @@ c-----------------------------------------------------------------------
 
 c-----------------------------------------------------------------------
       IF(myid .EQ. 0)THEN
-      print*,'skip riv_bio load if start month ne 1, file: ',rivinp_bio
+!KB      print*,'skip riv_bio load if start month ne 1, file: ',rivinp_bio
       endif
 c-----------------------------------------------------------------------
 
