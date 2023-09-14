@@ -185,8 +185,102 @@ c-----------------------------------------------------------------------
       return
       end
 
+c*��4-5 deco1d3d and comp3d1d for bottom variables
+c-----------------------------------------------------------------------
+      subroutine comp2d1d_bot(d2,d1)
+c-----------------------------------------------------------------------
+c    compressing 3-d arrays to compressed 1-d arrays 
+c-----------------------------------------------------------------------
+
+      include 'C_model.f'
+      include 'C_index.f'
+      parameter (khor1=khor+1)
+
+      dimension d2(m,n),d1(ndrei)
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),
+     *  indend(n),isornr(n),isorsr(n),islab(n)
+#ifdef MPI 
+      common /cord/ I1,I2,J1,J2,IA1,IA2,JA1,JA2,IB1,IB2,JB1,JB2
+     1,ID1,ID2,JD1,JD2
+      common /lbkhor/ khorl,lzet(khor),lb0(n),le0(n),
+     * lb1(n),le1(n),lb2(n),le2(n)
+#endif
+#ifdef MPI
+      do J=J1,J2
+         lwa = lb0(J)
+         lwe = le0(J)
+#else
+      do j=1,n
+         lwa = lwe+1
+         lwe = indend(j)
+#endif
+         do lw=lwa,lwe
+            i = iwet(lw)
+            lump = lazc(lw)
+            nwet = indwet(lw)
+            do k=1,lump
+               nwet = nwet+1
+               if(k.eq.lazc(lw)) then
+                  d1(nwet)=d2(i,j)
+               else
+                  d1(nwet)=0.
+               endif
+            enddo
+         enddo
+      enddo
+
+      return
+      end
+ 
+c-----------------------------------------------------------------------
+      subroutine deco1d2d_bot (u,ucomp,ntot)
+c-----------------------------------------------------------------------
+c     expanding 1-d-array ->  3-d-arry 
+c-----------------------------------------------------------------------
+      include 'C_model.f'
+      include 'C_index.f'
+      parameter (khor1=khor+1)
+
+      dimension u(m,n)
+      dimension ucomp(ntot)
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),
+     * indend(n),isornr(n),isorsr(n),islab(n)
+#ifdef MPI 
+      common /cord/ I1,I2,J1,J2,IA1,IA2,JA1,JA2,IB1,IB2,JB1,JB2
+     1,ID1,ID2,JD1,JD2
+      common /lbkhor/ khorl,lzet(khor),lb0(n),le0(n),
+     * lb1(n),le1(n),lb2(n),le2(n)
+#endif
+
+#ifdef MPI
+      do J=J1,J2
+         lwa = lb0(J)
+         lwe = le0(J)
+#else
+      do j=1,n
+         lwa = lwe+1
+         lwe = indend(j)
+#endif
+         do lw=lwa,lwe
+            i = iwet(lw)
+            lump = lazc(lw)
+            nwet = indwet(lw)
+            do k=1,lump
+               nwet = nwet+1
+               if(k.eq.lazc(lw)) then
+               u(i,j) = ucomp(nwet)
+cc       sediment(i,j,ised)=Tsed(nwet,ised)
+               endif
+            enddo
+         enddo
+      enddo
+
+      return
+      end
 
 
+
+c-------------------------------------------------------------------------------
       subroutine readmet (feldncep,ncep,nincep,ijahr)
       dimension feldncep(ncep)
 

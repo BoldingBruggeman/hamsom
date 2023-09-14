@@ -17,7 +17,7 @@ private
    class (type_fabm_model), pointer :: model
    integer :: ny,nx,nz ! size of the FABM 3D model
                        ! y (ny -> from north), x (nx -> from west), z (nz -> from top)
-   integer :: npel,nsed,khor,ndrei
+   integer :: npel,nsed,khor,ndrei, nflu
 
    integer, dimension(:), allocatable :: variable_order
 
@@ -26,6 +26,10 @@ private
    integer :: stat
 
    real, public, allocatable, dimension(:,:,:,:), target :: vertical_movement
+
+   logical, public, allocatable, dimension(:) :: diagnostic_included
+   character(len=50), public, allocatable, dimension(:) :: diagnostic_list
+
 
    real, allocatable, dimension(:,:,:), target :: h 
    logical, allocatable, dimension(:,:,:) :: fabm_mask
@@ -41,6 +45,7 @@ private
    real, allocatable, dimension(:,:), target :: bottom_stress
    integer, allocatable, dimension(:,:), target :: bindx 
 
+   !real, allocatable, dimension(:,:,:), target :: diagnostics 
 
 #ifndef MPI
    integer :: myid=0
@@ -56,7 +61,7 @@ contains
 #ifndef MPI
 subroutine configure_fabm(m,n,ilo,khor_,ndrei_,nbio,nsed_)
 #else
-subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
+subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_, nflu_)
    integer, intent(in) :: myid
 #endif
    integer, intent(in) :: m,n,ilo ! y (m -> from north), x (n -> from west), z (ilo -> from top)
@@ -64,6 +69,7 @@ subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
    integer, intent(in) :: ndrei_
    integer, intent(in) :: nbio
    integer, intent(in) :: nsed_
+   integer, intent(in) :: nflu_
 
    integer :: ivar,nvar
 
@@ -74,6 +80,7 @@ subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
    khor=khor_
    npel=nbio
    nsed=nsed_
+   nflu=nflu_
 
    if (myid .eq. 0) then
       write(fabmunit,*) 'configure_fabm()'
@@ -82,6 +89,7 @@ subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
       write(fabmunit,*) '  khor=     ',khor
       write(fabmunit,*) '  npel=     ',npel
       write(fabmunit,*) '  nsed=     ',nsed
+      write(fabmunit,*) '  nflu=     ',nflu
    end if
 
    model => fabm_create_model('fabm.yaml')
@@ -96,6 +104,19 @@ subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_)
    if (myid .eq. 0) then
       do ivar=1,size(model%bottom_state_variables)
          write(fabmunit,*) ivar,trim(model%bottom_state_variables(ivar)%name)
+      end do
+   end if
+   if (myid .eq. 0) then
+      do ivar=1,size(model%interior_diagnostic_variables)
+         write(fabmunit,*) ivar,trim(model%interior_diagnostic_variables(ivar)%name)
+      end do
+   end if
+   if (size(model%interior_diagnostic_variables) > 0) then
+      allocate(diagnostic_included(size(model%interior_diagnostic_variables)))
+      diagnostic_included = .false.
+      allocate(diagnostic_list(size(model%interior_diagnostic_variables)))
+      do ivar=1,size(model%interior_diagnostic_variables)
+         diagnostic_list(ivar) = model%interior_diagnostic_variables(ivar)%name
       end do
    end if
 end subroutine configure_fabm

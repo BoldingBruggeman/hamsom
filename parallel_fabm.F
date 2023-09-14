@@ -3446,6 +3446,64 @@ c      write(outfile(6:7),'(i2.2)') monat
       end
 
 *************************************************************************************************************************************************
+       subroutine combine_output_f(nout,pathout,monat,ppp,
+     & mjar,icord,nflu,itagend,toutsteps)
+      include 'C_model.f'
+      include 'C_paths.f'
+      include 'C_mpi.f'
+      include 'C_index.f'
+      parameter (khor1=khor+1)
+      common /lbkhor/ khorl,lzet(khor),lb0(n),le0(n),
+     * lb1(n),le1(n),lb2(n),le2(n)
+      dimension B(ndrei,nflu)
+      character ppp*3,outfile*10,command*36
+      character*19 pathout
+      common /ind/ iwet(khor1),ldep(khor),lazc(khor),indend(n),
+     *             isornr(n),isorsr(n),islab(n)
+      common /surface/ izets(m,n),izete(m,n)
+      dimension icord(nprocs,4)
+      common /out11/ mzet(khor,nprocs),lkhor(nprocs)
+
+
+      outfile(1:3)=ppp
+      write(outfile(4:5),'(i2.2)') mjar
+c      write(outfile(6:7),'(i2.2)') monat
+      outfile(9:9)='f'
+
+      DO nn=1,nprocs
+      write(outfile(6:8),'(i3.3)') nn-1
+      open(unit=600+nn,file=pathpc2//pathout//outfile
+     &,form='unformatted')
+      ENDDO
+      DO I=1,itagend*toutsteps
+      DO nn=1,nprocs
+      I11=icord(nn,1)
+      I22=icord(nn,2)
+      J11=icord(nn,3)
+      J22=icord(nn,4)
+      DO ib=1,nflu
+      DO J=J11,J22
+      lwa=izets(I11,J)
+      lwe=izete(I22,J)
+      if(lwe .ge. lwa) then
+      nwet1=indwet(lwa)+1
+      nwet2=indwet(lwe)+lazc(lwe)
+      read (600+nn) (B(k,ib),k=nwet1,nwet2)
+      endif
+      enddo
+      enddo
+      enddo
+      write (nout)B
+      enddo
+      do nn=1,nprocs
+      close(600+nn)
+      enddo
+
+      return
+      end
+
+
+*************************************************************************************************************************************************
       subroutine combine_meteo_data(nanz,outfile1,pathout,nloop)
       include 'C_mpi.f'
       include 'C_model.f'
