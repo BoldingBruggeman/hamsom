@@ -17,18 +17,19 @@ private
    class (type_fabm_model), pointer :: model
    integer :: ny,nx,nz ! size of the FABM 3D model
                        ! y (ny -> from north), x (nx -> from west), z (nz -> from top)
-   integer :: npel,nsed,khor,ndrei, nflu
+   integer :: npel,nsed,khor,ndrei,nflu
 
    integer, dimension(:), allocatable :: variable_order
 
-!KB   integer :: fabmunit=120
-   integer :: fabmunit=0
+   integer :: fabmunit=120
+!KB   integer :: fabmunit=0
    integer :: stat
 
    real, public, allocatable, dimension(:,:,:,:), target :: vertical_movement
 
    logical, public, allocatable, dimension(:) :: diagnostic_included
    character(len=50), public, allocatable, dimension(:) :: diagnostic_list
+   real(rke), pointer, dimension(:,:,:)            :: pdata
 
 
    real, allocatable, dimension(:,:,:), target :: h 
@@ -45,7 +46,6 @@ private
    real, allocatable, dimension(:,:), target :: bottom_stress
    integer, allocatable, dimension(:,:), target :: bindx 
 
-   !real, allocatable, dimension(:,:,:), target :: diagnostics 
 
 #ifndef MPI
    integer :: myid=0
@@ -145,6 +145,7 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
    write(fabmunit,*) 'initialize_fabm()',myid
 
    if(myid .eq. 0) then
+
        write(fabmunit,*) size(iwet),shape(iwet),rank(iwet)
        write(fabmunit,*) lbound(iwet),ubound(iwet)
        write(fabmunit,*) size(indend),shape(indend),rank(indend)
@@ -207,7 +208,7 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
 
    ! link to pelagic state variables
    do ivar = 1,size(model%interior_state_variables)
-      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar))
+      call model%link_interior_state_data(ivar,pelagic(:,:,:,ivar+2))
    end do
    ! link to benthic state variables
    do ivar = 1,size(model%bottom_state_variables)
@@ -237,9 +238,9 @@ subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Ts
    integer, intent(in) :: iwet(:),indend(:)
    integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:) ! used only for packing/unpacking
    integer, intent(in) :: ltief(:,:)
-   real, dimension(:,:,:), intent(inout) :: pd2
-   real, dimension(:,:), intent(inout) :: Tc
-   real, dimension(:,:), intent(inout) :: Tsed
+   real, dimension(:,:,:), intent(in) :: pd2
+   real, dimension(:,:), intent(in) :: Tc
+   real, dimension(:,:), intent(in) :: Tsed
    real, dimension(:,:), intent(inout) :: dTc
    real, dimension(:,:), intent(inout) :: dTsed
 
@@ -390,40 +391,6 @@ subroutine unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
 #endif
    end do
 
-#if 1
-   unpack: block
-   integer ised
-   integer :: J,J1,J2
-   integer :: lw,lwa,lwe
-   integer :: i,lump,nwet,k
-
-   do ised=1,nsed
-#ifdef MPI
-      do J=J1,J2
-         lwa = lb0(J)
-         lwe = le0(J)
-#else
-      do j=1,n
-         lwa = lwe+1
-         lwe = indend(j)
-#endif
-         do lw=lwa,lwe
-            i = iwet(lw)
-            lump = lazc(lw)
-            nwet = indwet(lw)
-            do k=1,lump
-               nwet = nwet+1
-               if(k.eq.lazc(lw)) then
-                  sediment(i,j,ised)=Tsed(nwet,ised)
-               endif
-            enddo
-         enddo
-      enddo
-   enddo
-   end block unpack
-
-#else
-
    do l=1,nsed
 #ifdef MPI
       call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
@@ -431,7 +398,6 @@ subroutine unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
       call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
 #endif
    end do
-#endif
 end subroutine unpack_data
 
 !-----------------------------------------------------------------------
@@ -452,42 +418,6 @@ subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
 #endif
    end do
 
-#if 1
-   pack: block
-   integer ised
-   integer :: J,J1,J2
-   integer :: lw,lwa,lwe
-   integer :: i,lump,nwet,k
-
-   do ised=1,nsed
-#ifdef MPI
-      do J=J1,J2
-         lwa = lb0(J)
-         lwe = le0(J)
-#else
-      do j=1,n
-         lwa = lwe+1
-         lwe = indend(j)
-#endif
-         do lw=lwa,lwe
-            i = iwet(lw)
-            lump = lazc(lw)
-            nwet = indwet(lw)
-            do k=1,lump
-               nwet = nwet+1
-               if(k.eq.lazc(lw)) then
-                  dTsed(nwet,ised)=bottom_sms(i,j,ised)
-               else
-                  dTsed(nwet,ised)=0.
-               endif
-            enddo
-         enddo
-      enddo
-   enddo
-   end block pack
-
-#else
-
    do l=1,nsed
 #ifdef MPI
       call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
@@ -495,7 +425,6 @@ subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
       call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
 #endif
    end do
-#endif
 end subroutine pack_data
 
 !-----------------------------------------------------------------------

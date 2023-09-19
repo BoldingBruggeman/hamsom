@@ -3914,7 +3914,7 @@ c#endif
       if (k.eq.1) then
        wo = 0.
         SinkD_o = 0.
-       SinkD_u =vertical_movement(i,j,k+1,ibio-2)*r_dt_dd(ll+1)    !BioC(23) [m/s]
+!KB       SinkD_u =vertical_movement(i,j,k+1,ibio-2)*r_dt_dd(ll+1)    !BioC(23) [m/s]
       elseif (k.eq.lazc(llw(ll))) then
        wu=0.
        SinkD_u=0.
