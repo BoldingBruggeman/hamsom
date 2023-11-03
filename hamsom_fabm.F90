@@ -29,7 +29,8 @@ private
 
    logical, public, allocatable, dimension(:) :: diagnostic_included
    character(len=50), public, allocatable, dimension(:) :: diagnostic_list
-   real(rke), pointer, dimension(:,:,:)            :: pdata
+   real(rke), pointer, dimension(:,:,:) :: pdata
+   !real(rke), pointer _DIMENSION_GLOBAL_  :: pdata
 
 
    real, allocatable, dimension(:,:,:), target :: h 
@@ -111,6 +112,9 @@ subroutine configure_fabm(myid,m,n,ilo,khor_,ndrei_,nbio,nsed_, nflu_)
          write(fabmunit,*) ivar,trim(model%interior_diagnostic_variables(ivar)%name)
       end do
    end if
+   if (size(model%interior_diagnostic_variables) < nflu) then
+      stop "nflu is bigger than number of diagnostic variable"
+   end if
    if (size(model%interior_diagnostic_variables) > 0) then
       allocate(diagnostic_included(size(model%interior_diagnostic_variables)))
       diagnostic_included = .false.
@@ -164,6 +168,7 @@ subroutine initialize_fabm(myid,dt,iwet,indend,lazc,lb0,le0,indwet,icord,pd2,Tc,
 !KB       write(fabmunit,*) lbound(Tc),ubound(Tc)
 !KB       write(fabmunit,*) size(Tsed),shape(Tsed),rank(Tsed)
 !KB       write(fabmunit,*) lbound(Tsed),ubound(Tsed)
+!KB       write(fabmunit,*) lbound(flu),ubound(flu)
    end if
 
    ! FABM variables are being 'initialized'
@@ -232,7 +237,7 @@ end subroutine initialize_fabm
 
 !-----------------------------------------------------------------------
 
-subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Tsed,dTc,dTsed)
+subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Tsed,dTc,dTsed,flu)
    integer, intent(in) :: myid
    integer, intent(in) :: imal
    integer, intent(in) :: iwet(:),indend(:)
@@ -243,16 +248,19 @@ subroutine update_fabm(myid,imal,iwet,indend,lazc,lb0,le0,indwet,ltief,pd2,Tc,Ts
    real, dimension(:,:), intent(in) :: Tsed
    real, dimension(:,:), intent(inout) :: dTc
    real, dimension(:,:), intent(inout) :: dTsed
+   real, dimension(:,:), intent(inout) :: flu
 
    integer :: i,j,k,l
 
-   real :: decode_timing=0.,decode_start,decode_stop
    real :: fabm_timing=0.,fabm_start,fabm_stop
+   real :: decode_timing=0.,decode_start,decode_stop
    real :: encode_timing=0.,encode_start,encode_stop
 
    if (myid .eq. 0) then
       write(*,*) 'update_fabm()'
    end if
+
+call cpu_time(fabm_start)
 
 call cpu_time(decode_start)
    call unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
@@ -309,7 +317,7 @@ call cpu_time(fabm_stop)
 fabm_timing=fabm_timing+fabm_stop-fabm_start
 
 call cpu_time(encode_start)
-   call pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
+   call pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed,flu)
 call cpu_time(encode_stop)
 encode_timing=encode_timing+encode_stop-encode_start
 
@@ -392,23 +400,20 @@ subroutine unpack_data(iwet,indend,lazc,lb0,le0,indwet,Tc,Tsed)
    end do
 
    do l=1,nsed
-#ifdef MPI
-      call deco1d2d_s(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#else
-      call deco1d2d(sediment(:,:,l),Tsed(:,l),iwet,indend,1)
-#endif
+      call deco1d2d_bot(sediment(:,:,l),Tsed(:,l),ndrei)
    end do
 end subroutine unpack_data
 
 !-----------------------------------------------------------------------
 
-subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
+subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed,flu)
    integer, intent(in) :: iwet(:),indend(:)
    integer, intent(in) :: lazc(:),lb0(:),le0(:),indwet(:)
    real, intent(inout) :: dTc(:,:)
    real, intent(inout) :: dTsed(:,:)
+   real, intent(inout) :: flu(:,:)
 
-   integer :: l
+   integer :: l,n
 
    do l=3,npel
 #ifdef MPI
@@ -419,11 +424,24 @@ subroutine pack_data(iwet,indend,lazc,lb0,le0,indwet,dTc,dTsed)
    end do
 
    do l=1,nsed
+      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+   end do
+
+   n=1
+   !pdata = model%get_interior_diagnostic_data(1)
+   !write(*,*) pdata
+   do l=1,size(model%interior_diagnostic_variables)
+      if (diagnostic_included(l) .and. .false.) then
+      !if (diagnostic_included(l)) then
+         pdata = model%get_interior_diagnostic_data(l)
+         write(*,*) pdata
 #ifdef MPI
-      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+         call comp3d1d_s(pdata,flu(:,n))
 #else
-      call comp2d1d(bottom_sms(:,:,l),dTsed(:,l))
+         call comp3d1d(pdata,flu(:,n))
 #endif
+         n=n+1
+      end if
    end do
 end subroutine pack_data
 

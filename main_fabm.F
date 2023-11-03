@@ -425,7 +425,10 @@ cUD bottom shear stress
       logical apply_fabm, init_bio,diagn_out
       integer nfuriv(nbio)
       integer ivar
+      nflu=1
       call configure_fabm(myid,m,n,ilo,khor,ndrei,nbio,nsed,nflu)
+      write(*,*) diagnostic_included
+      diagnostic_included(1) = .true.
       write(*,*) diagnostic_included
       write(*,*) diagnostic_list
       diagn_out=.false.
@@ -3826,7 +3829,7 @@ cUD    calculate bottom shear stress
       call update_fabm(myid,imal,iwet,indend,
      &                 lazc(:),lb0(:),le0(:),indwet(:),
      &                 ltief,
-     &                 pd2(:,:,1:ilo),Tc,Tsed,dTc,dTsed)
+     &                 pd2(:,:,1:ilo),Tc,Tsed,dTc,dTsed,flu)
 
  
 !---------------------------------------------------------
